@@ -1,0 +1,4 @@
+{
+  "vitest.workspaceConfig": "${workspaceFolder}/vite.config.ts",
+  "vitest.include": ["src/**/*.{test,spec}.ts"]
+}

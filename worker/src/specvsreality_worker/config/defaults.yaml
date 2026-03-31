@@ -1,0 +1,10 @@
+# Committed defaults — clone and run with local RabbitMQ without inventing queue names.
+# Override with environment variables (RABBITMQ_*); see .env.example.
+
+host: localhost
+port: 5672
+virtual_host: /
+queue_name: messages
+prefetch_count: 1
+username: guest
+password: ""

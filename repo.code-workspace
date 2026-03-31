@@ -1,0 +1,92 @@
+{
+  "folders": [
+    {
+      "name": "frontend",
+      "path": "frontend"
+    },
+    {
+      "name": "api",
+      "path": "api"
+    },
+    {
+      "name": "repositories",
+      "path": "repositories"
+    },
+    {
+      "name": "messages",
+      "path": "messages"
+    },
+    {
+      "name": "tools",
+      "path": "tools"
+    },
+    {
+      "name": "worker",
+      "path": "worker"
+    }
+  ],
+  "settings": {
+    "python.defaultInterpreterPath": "${workspaceFolder:worker}/../.venv/bin/python",
+    "python.terminal.activateEnvironment": true,
+    "python.testing.pytestEnabled": true,
+    "python.testing.unittestEnabled": false,
+    "python.testing.cwd": "${workspaceFolder:worker}/..",
+    "python.testing.pytestPath": "${workspaceFolder:worker}/../.venv/bin/pytest",
+    "python.testing.pytestArgs": [],
+    "python.analysis.extraPaths": [
+      "${workspaceFolder:worker}/../worker/src",
+      "${workspaceFolder:worker}/../messages/src",
+      "${workspaceFolder:worker}/../repositories/src",
+      "${workspaceFolder:worker}/../api/src"
+    ],
+    "vitest.workspaceConfig": "${workspaceFolder:frontend}/vite.config.ts",
+    "vitest.include": ["${workspaceFolder:frontend}/src/**/*.{test,spec}.ts"]
+  },
+  "launch": {
+    "version": "0.2.0",
+    "configurations": [
+      {
+        "name": "API (FastAPI)",
+        "type": "debugpy",
+        "request": "launch",
+        "module": "uvicorn",
+        "args": [
+          "specvsreality_api.main:app",
+          "--reload",
+          "--host",
+          "0.0.0.0",
+          "--port",
+          "8000"
+        ],
+        "cwd": "${workspaceFolder:worker}/..",
+        "env": {
+          "PYTHONPATH": "${workspaceFolder:worker}/../api/src"
+        },
+        "python": "${workspaceFolder:worker}/../.venv/bin/python",
+        "console": "integratedTerminal",
+        "subProcess": true,
+        "jinja": true,
+        "justMyCode": false
+      },
+      {
+        "name": "Worker (RabbitMQ consumer)",
+        "type": "debugpy",
+        "request": "launch",
+        "module": "specvsreality_worker.main",
+        "cwd": "${workspaceFolder:worker}/..",
+        "python": "${workspaceFolder:worker}/../.venv/bin/python",
+        "console": "integratedTerminal",
+        "justMyCode": false
+      },
+      {
+        "name": "Frontend (SvelteKit)",
+        "type": "node",
+        "request": "launch",
+        "runtimeExecutable": "npm",
+        "runtimeArgs": ["run", "dev"],
+        "cwd": "${workspaceFolder:frontend}",
+        "console": "integratedTerminal"
+      }
+    ]
+  }
+}

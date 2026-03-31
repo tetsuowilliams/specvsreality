@@ -1,0 +1,79 @@
+[project]
+name = "specvsreality"
+version = "0.1.0"
+description = "Spec vs reality monorepo"
+requires-python = ">=3.11"
+readme = "README.md"
+dependencies = [
+    "specvsreality-worker",
+    "specvsreality-repositories",
+    "specvsreality-api",
+]
+
+[tool.uv.sources]
+specvsreality-worker = { workspace = true }
+specvsreality-messages = { workspace = true }
+specvsreality-repositories = { workspace = true }
+specvsreality-api = { workspace = true }
+
+[tool.uv.workspace]
+members = ["worker", "messages", "repositories", "api"]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "pytest-mock>=3.12",
+    "mypy>=1.8",
+    "types-PyYAML>=6.0",
+    "ruff>=0.3",
+    "testcontainers[postgres]>=4.0",
+    "httpx>=0.27",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["worker/tests", "messages/tests", "repositories/tests", "api/tests"]
+pythonpath = ["worker/src", "worker/tests", "messages/src", "repositories/src", "api/src"]
+
+[tool.ruff]
+target-version = "py311"
+src = [
+    "worker/src",
+    "worker/tests",
+    "messages/src",
+    "messages/tests",
+    "repositories/src",
+    "repositories/tests",
+    "api/src",
+    "api/tests",
+]
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.ruff.lint.per-file-ignores]
+"repositories/alembic/env.py" = ["E402"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+warn_unreachable = true
+mypy_path = ["worker/src", "messages/src", "repositories/src", "api/src"]
+packages = [
+    "specvsreality_worker",
+    "specvsreality_messages",
+    "specvsreality_repositories",
+    "specvsreality_api",
+]
+
+[[tool.mypy.overrides]]
+module = "pika.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "testcontainers.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "git.*"
+ignore_missing_imports = true
