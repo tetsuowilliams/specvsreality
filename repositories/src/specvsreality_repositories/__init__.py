@@ -1,5 +1,25 @@
 """Database models and migration metadata."""
 
-from specvsreality_repositories.models import Base, GitRepo
+from specvsreality_repositories.models import (
+    Artifact,
+    ArtifactVersion,
+    Base,
+    GitRepo,
+    Implements,
+    Requirement,
+    RequirementVersion,
+    Spec,
+    SpecVersion,
+)
 
-__all__ = ["Base", "GitRepo"]
+__all__ = [
+    "Artifact",
+    "ArtifactVersion",
+    "Base",
+    "GitRepo",
+    "Implements",
+    "Requirement",
+    "RequirementVersion",
+    "Spec",
+    "SpecVersion",
+]

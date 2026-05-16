@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "skills": {
+    "instrument": {
+      "source": "comet-ml/opik-skills",
+      "sourceType": "github",
+      "skillPath": "skills/instrument/SKILL.md",
+      "computedHash": "e1cf471a4bdcbf413e552bdfa7941a692314ddce96e12b93e2e73fc34c1c2ce5"
+    }
+  }
+}

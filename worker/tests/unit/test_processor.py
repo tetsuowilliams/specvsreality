@@ -7,6 +7,7 @@ from typing import ClassVar
 from pydantic import BaseModel
 
 from specvsreality_messages.hello_world import HELLO_WORLD_MESSAGE_TYPE, HelloWorldMessage
+from specvsreality_messages.scan_repo import SCAN_REPO_MESSAGE_TYPE, ScanRepoMessage
 from specvsreality_worker.handlers.protocol import MessageHandler
 from specvsreality_worker.messaging.handler_registry import HandlerRegistry
 from specvsreality_worker.messaging.processor import InboundMessageProcessor, ProcessResult
@@ -74,6 +75,15 @@ def test_processor_handler_exception_returns_failure() -> None:
     assert result.ok is False
 
 
+def test_processor_dispatches_scan_repo_message() -> None:
+    sink: list[str] = []
+    registry = HandlerRegistry([_ScanRepoCapture(sink)])
+    processor = InboundMessageProcessor(registry)
+    body = b'{"message_type":"scan_repo","repo_id":"r-123"}'
+    assert processor.process(body) == ProcessResult(ok=True)
+    assert sink == ["r-123"]
+
+
 class _HelloWorldCapture(MessageHandler):
     message_type: ClassVar[str] = HELLO_WORLD_MESSAGE_TYPE
 
@@ -83,3 +93,14 @@ class _HelloWorldCapture(MessageHandler):
     def handle(self, message: BaseModel) -> None:
         m = HelloWorldMessage.model_validate(message.model_dump())
         self._sink.append(m.name)
+
+
+class _ScanRepoCapture(MessageHandler):
+    message_type: ClassVar[str] = SCAN_REPO_MESSAGE_TYPE
+
+    def __init__(self, sink: list[str]) -> None:
+        self._sink = sink
+
+    def handle(self, message: BaseModel) -> None:
+        m = ScanRepoMessage.model_validate(message.model_dump())
+        self._sink.append(m.repo_id)

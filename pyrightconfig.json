@@ -1,0 +1,52 @@
+{
+  "venvPath": ".",
+  "venv": ".venv",
+  "include": [
+    "worker/src",
+    "worker/tests",
+    "repositories/src",
+    "repositories/tests",
+    "messages/src",
+    "messages/tests",
+    "api/src",
+    "api/tests"
+  ],
+  "executionEnvironments": [
+    {
+      "root": "worker/src",
+      "extraPaths": [
+        "worker/src",
+        "repositories/src",
+        "messages/src",
+        "api/src"
+      ]
+    },
+    {
+      "root": "repositories/src",
+      "extraPaths": [
+        "worker/src",
+        "repositories/src",
+        "messages/src",
+        "api/src"
+      ]
+    },
+    {
+      "root": "messages/src",
+      "extraPaths": [
+        "worker/src",
+        "repositories/src",
+        "messages/src",
+        "api/src"
+      ]
+    },
+    {
+      "root": "api/src",
+      "extraPaths": [
+        "worker/src",
+        "repositories/src",
+        "messages/src",
+        "api/src"
+      ]
+    }
+  ]
+}

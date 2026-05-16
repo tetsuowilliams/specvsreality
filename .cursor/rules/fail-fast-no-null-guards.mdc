@@ -1,0 +1,29 @@
+---
+description: Prefer fail-fast code and avoid null-guarded fallback construction
+alwaysApply: true
+---
+
+# Fail Fast, No Null Fallbacks
+
+- Prefer fail-fast behavior over silent fallback behavior.
+- Do not add defensive `None`/`null` parameter checks to construct default dependencies.
+- Assume constructor and method contracts are honored by callers.
+- If a required dependency is missing, let execution fail immediately with a clear exception.
+
+## Examples
+
+```python
+# BAD
+service = maybe_service if maybe_service is not None else DefaultService()
+```
+
+```python
+# GOOD
+service = maybe_service
+```
+
+```python
+# GOOD (if validation is needed at boundaries)
+if boundary_input is None:
+    raise ValueError("boundary_input must not be None")
+```

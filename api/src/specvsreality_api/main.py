@@ -6,7 +6,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from specvsreality_api.config import get_settings
-from specvsreality_api.routes import health, hello_world
+from specvsreality_api.routes import gantt, health, hello_world, repo_catalog, repos
 
 
 def create_app() -> FastAPI:
@@ -20,6 +20,9 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
     app.include_router(hello_world.router)
+    app.include_router(repos.router)
+    app.include_router(repo_catalog.router)
+    app.include_router(gantt.router)
     app.include_router(health.router)
     return app
 

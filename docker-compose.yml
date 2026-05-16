@@ -45,7 +45,7 @@ services:
       RABBITMQ_USERNAME: guest
       RABBITMQ_PASSWORD: guest
       RABBITMQ_QUEUE_NAME: messages
-      CORS_ORIGINS: '["http://localhost:8080","http://127.0.0.1:8080","http://localhost:5173"]'
+      CORS_ORIGINS: '["http://localhost:8080","http://127.0.0.1:8080","http://localhost:5173","http://127.0.0.1:5173","http://localhost:5174","http://127.0.0.1:5174","http://localhost:4173","http://127.0.0.1:4173"]'
     depends_on:
       postgres:
         condition: service_healthy
@@ -56,16 +56,31 @@ services:
     build:
       context: .
       dockerfile: worker/Dockerfile
+    # So OPIK_URL_OVERRIDE can use host.docker.internal when Opik runs on the host / another compose stack.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    env_file:
+      - ./worker/.env
     environment:
+      DATABASE_URL: postgresql+psycopg://specvsreality:specvsreality@postgres:5432/specvsreality
       RABBITMQ_HOST: rabbitmq
       RABBITMQ_PORT: "5672"
       RABBITMQ_VIRTUAL_HOST: /
       RABBITMQ_USERNAME: guest
       RABBITMQ_PASSWORD: guest
       RABBITMQ_QUEUE_NAME: messages
+      REPO_CLONE_ROOT: /repos
+      GIT_CLONE_TOKEN: ${GIT_CLONE_TOKEN:-}
+      GIT_CLONE_USERNAME: ${GIT_CLONE_USERNAME:-x-access-token}
+    volumes:
+      - repo_clones:/repos
     depends_on:
+      postgres:
+        condition: service_healthy
       rabbitmq:
         condition: service_healthy
+      promtail:
+        condition: service_started
 
   frontend:
     build:
@@ -78,5 +93,42 @@ services:
     depends_on:
       - api
 
+  loki:
+    image: grafana/loki:3.1.1
+    command: ["-config.file=/etc/loki/local-config.yaml"]
+    ports:
+      - "3100:3100"
+    volumes:
+      - ./observability/loki/loki-config.yml:/etc/loki/local-config.yaml:ro
+      - loki_data:/loki
+
+  promtail:
+    image: grafana/promtail:3.1.1
+    command: ["-config.file=/etc/promtail/config.yml"]
+    volumes:
+      - ./observability/promtail/promtail-config.yml:/etc/promtail/config.yml:ro
+      - promtail_positions:/tmp
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    depends_on:
+      - loki
+
+  grafana:
+    image: grafana/grafana:11.1.4
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
+    depends_on:
+      - loki
+
 volumes:
   pgdata:
+  repo_clones:
+  loki_data:
+  grafana_data:
+  promtail_positions:

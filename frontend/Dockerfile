@@ -2,7 +2,7 @@
 
 FROM node:22-alpine AS build
 WORKDIR /app
-COPY package.json package-lock.json ./
+COPY package.json package-lock.json .npmrc ./
 RUN npm ci --ignore-scripts
 COPY . .
 ARG PUBLIC_API_BASE_URL=http://localhost:8000

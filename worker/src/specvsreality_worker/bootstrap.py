@@ -6,7 +6,7 @@ from collections.abc import Iterable
 
 from specvsreality_messages import KNOWN_MESSAGE_TYPES
 from specvsreality_worker.config import WorkerSettings, load_settings
-from specvsreality_worker.handlers import HelloWorldHandler, MessageHandler
+from specvsreality_worker.handlers import HelloWorldHandler, MessageHandler, ScanRepoHandler
 from specvsreality_worker.messaging.consumer import ConnectionFactory, QueueConsumer
 from specvsreality_worker.messaging.handler_registry import HandlerRegistry
 from specvsreality_worker.messaging.processor import InboundMessageProcessor
@@ -26,7 +26,7 @@ def ensure_handlers_cover_messages(registry: HandlerRegistry) -> None:
 
 def default_handlers() -> tuple[MessageHandler, ...]:
     """Default handler set for a standalone worker process."""
-    return (HelloWorldHandler(),)
+    return (HelloWorldHandler(), ScanRepoHandler())
 
 
 def build_handler_registry(handlers: Iterable[MessageHandler] | None = None) -> HandlerRegistry:

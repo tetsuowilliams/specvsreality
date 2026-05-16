@@ -53,19 +53,28 @@ def test_iter_commits_since_at_tip_empty(tmp_path) -> None:
 def test_changed_paths_root_commit_lists_all_blobs(tmp_path) -> None:
     path, shas = make_linear_three_commit_repo(tmp_path, use_main=True)
     adapter = GitAdapter(path)
-    assert adapter.changed_paths(shas[0]) == ["README.md"]
+    info = adapter.changed_paths(shas[0])
+    assert info.new_files == ["README.md"]
+    assert info.modified_files == []
+    assert info.deleted_files == []
 
 
 def test_changed_paths_middle_commit(tmp_path) -> None:
     path, shas = make_linear_three_commit_repo(tmp_path, use_main=True)
     adapter = GitAdapter(path)
-    assert adapter.changed_paths(shas[1]) == ["docs/feature.spec.md"]
+    info = adapter.changed_paths(shas[1])
+    assert info.new_files == ["docs/feature.spec.md"]
+    assert info.modified_files == []
+    assert info.deleted_files == []
 
 
 def test_changed_paths_modification_commit(tmp_path) -> None:
     path, shas = make_linear_three_commit_repo(tmp_path, use_main=True)
     adapter = GitAdapter(path)
-    assert adapter.changed_paths(shas[2]) == ["README.md"]
+    info = adapter.changed_paths(shas[2])
+    assert info.new_files == []
+    assert info.modified_files == ["README.md"]
+    assert info.deleted_files == []
 
 
 def test_file_at_commit_reads_utf8_text(tmp_path) -> None:
@@ -79,6 +88,26 @@ def test_file_at_commit_missing_raises(tmp_path) -> None:
     adapter = GitAdapter(path)
     with pytest.raises(GitAdapterError, match="No path"):
         adapter.file_at_commit(shas[1], "nope.txt")
+
+
+def test_file_at_commit_or_none_missing_returns_none(tmp_path) -> None:
+    path, shas = make_linear_three_commit_repo(tmp_path, use_main=True)
+    adapter = GitAdapter(path)
+    assert adapter.file_at_commit_or_none(shas[1], "nope.txt") is None
+
+
+def test_file_at_commit_or_none_present_matches_file_at_commit(tmp_path) -> None:
+    path, shas = make_linear_three_commit_repo(tmp_path, use_main=True)
+    adapter = GitAdapter(path)
+    p = "docs/feature.spec.md"
+    assert adapter.file_at_commit_or_none(shas[1], p) == adapter.file_at_commit(shas[1], p)
+
+
+def test_file_at_commit_or_none_unknown_commit_raises(tmp_path) -> None:
+    path, _ = make_linear_three_commit_repo(tmp_path, use_main=True)
+    adapter = GitAdapter(path)
+    with pytest.raises(GitAdapterError, match="Unknown commit"):
+        adapter.file_at_commit_or_none("0" * 40, "README.md")
 
 
 def test_file_at_commit_directory_not_blob_raises(tmp_path) -> None:
@@ -114,7 +143,7 @@ def test_iter_commits_since_invalid_range_raises(tmp_path) -> None:
         list(adapter.iter_commits_since("not-a-real-sha"))
 
 
-def test_repo_neither_main_nor_master_raises(tmp_path) -> None:
+def test_repo_neither_main_nor_master_falls_back_to_active_branch(tmp_path) -> None:
     path = tmp_path / "empty_heads"
     path.mkdir()
     repo = Repo.init(path)
@@ -131,5 +160,4 @@ def test_repo_neither_main_nor_master_raises(tmp_path) -> None:
             repo.delete_head(h, force=True)
     repo.git.branch("-m", "orph", "develop")
     adapter = GitAdapter(path)
-    with pytest.raises(GitAdapterError, match="neither main nor master"):
-        adapter.default_branch_ref()
+    assert adapter.default_branch_ref() == "develop"

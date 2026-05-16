@@ -1,5 +1,5 @@
 <script lang="ts">
-	import HelloWorldPanel from '$lib/components/HelloWorldPanel.svelte';
+	import ReposPanel from '$lib/components/ReposPanel.svelte';
 </script>
 
-<HelloWorldPanel />
+<ReposPanel />
