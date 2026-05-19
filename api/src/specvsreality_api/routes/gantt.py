@@ -23,7 +23,11 @@ async def get_requirement_latest_version(
     facade: Annotated[GanttChartFacade, Depends(get_gantt_chart_facade)],
     requirement_id: Annotated[
         int | None,
-        Query(description="Requirement row id; required when the spec has more than one requirement."),
+        Query(
+            description=(
+                "Requirement row id; required when the spec has more than one requirement."
+            ),
+        ),
     ] = None,
 ) -> RequirementLatestVersionResponse:
     return facade.get_requirement_latest_version(repo_id, spec_id, requirement_id=requirement_id)
@@ -39,7 +43,11 @@ async def get_spec_gantt_chart(
     facade: Annotated[GanttChartFacade, Depends(get_gantt_chart_facade)],
     requirement_id: Annotated[
         int | None,
-        Query(description="Requirement row id; required when the spec has more than one requirement."),
+        Query(
+            description=(
+                "Requirement row id; required when the spec has more than one requirement."
+            ),
+        ),
     ] = None,
 ) -> GanttChartResponse:
     return facade.get_chart(repo_id=repo_id, spec_id=spec_id, requirement_id=requirement_id)

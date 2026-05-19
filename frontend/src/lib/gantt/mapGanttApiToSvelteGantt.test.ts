@@ -19,14 +19,37 @@ function sampleChart(): GanttChartResponse {
 		requirement: {
 			paper_id: 'REQ-1',
 			history: [
-				{ start: t0, end: t1, status: 'implemented', commit: 'abc1234' },
-				{ start: t1, end: t2, status: 'not_implemented', commit: null }
+				{
+					start: t0,
+					end: t1,
+					status: 'implemented',
+					commit: 'abc1234',
+					requirement_text: 'req v1',
+					blob_sha: null
+				},
+				{
+					start: t1,
+					end: t2,
+					status: 'not_implemented',
+					commit: null,
+					requirement_text: 'req v2',
+					blob_sha: null
+				}
 			]
 		},
 		artifacts: [
 			{
 				filepath: 'src/foo.ts',
-				history: [{ start: t0, end: t2, status: 'active', commit: 'def5678' }]
+				history: [
+					{
+						start: t0,
+						end: t2,
+						status: 'active',
+						commit: 'def5678',
+						requirement_text: null,
+						blob_sha: 'b'.repeat(40)
+					}
+				]
 			}
 		]
 	};
@@ -52,6 +75,10 @@ describe('mapGanttApiToRowsAndTasks', () => {
 		expect(reqTasks[0]?.label).toBeUndefined();
 		expect(reqTasks[0]?.classes).toBe('gantt-status-ok');
 		expect(reqTasks[1]?.classes).toBe('gantt-status-warn');
+		expect(reqTasks[0]?.tooltip?.kind).toBe('requirement');
+		expect(reqTasks[0]?.tooltip?.requirementText).toBe('req v1');
+		expect(artTasks[0]?.tooltip?.kind).toBe('artifact');
+		expect(artTasks[0]?.tooltip?.blobSha).toHaveLength(40);
 	});
 
 	it('extends zero-length segments by at least one minute', () => {
@@ -60,7 +87,16 @@ describe('mapGanttApiToRowsAndTasks', () => {
 			meta: { requirement_implemented: false },
 			requirement: {
 				paper_id: 'R',
-				history: [{ start: same, end: same, status: 'deleted', commit: null }]
+				history: [
+					{
+						start: same,
+						end: same,
+						status: 'deleted',
+						commit: null,
+						requirement_text: 'gone',
+						blob_sha: null
+					}
+				]
 			},
 			artifacts: []
 		};

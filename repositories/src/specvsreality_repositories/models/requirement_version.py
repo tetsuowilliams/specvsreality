@@ -1,29 +1,60 @@
-"""Requirement state at a given commit."""
+"""Versioned requirement content extracted from a spec version."""
 
 from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text
-from sqlalchemy.dialects.postgresql import ARRAY
+from sqlalchemy import (
+    CHAR,
+    JSON,
+    BigInteger,
+    DateTime,
+    ForeignKey,
+    Text,
+    UniqueConstraint,
+    func,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
+from specvsreality_repositories.models._types import BigIntPk
 from specvsreality_repositories.models.base import Base
 
 
 class RequirementVersion(Base):
-    """Versioned requirement text and scope for a commit."""
+    """One LLM-extracted version of a requirement, tied to a spec version."""
 
-    __tablename__ = "requirement_version"
+    __tablename__ = "requirement_versions"
+    __table_args__ = (
+        UniqueConstraint(
+            "requirement_id",
+            "spec_version_id",
+            name="uq_requirement_versions_req_specver",
+        ),
+    )
 
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    id: Mapped[int] = mapped_column(BigIntPk, primary_key=True, autoincrement=True)
     requirement_id: Mapped[int] = mapped_column(
-        Integer,
-        ForeignKey("requirement.id", ondelete="CASCADE"),
+        BigInteger,
+        ForeignKey("requirements.id", ondelete="CASCADE"),
         nullable=False,
     )
-    commit_id: Mapped[str] = mapped_column(String(64), nullable=False)
-    commit_datetime: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    requirement_text: Mapped[str] = mapped_column(Text, nullable=False)
-    filepath_globs: Mapped[list[str]] = mapped_column(ARRAY(String), nullable=False)
-    status: Mapped[str] = mapped_column(String(64), nullable=False)
+    spec_version_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("spec_versions.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    content_hash: Mapped[str] = mapped_column(CHAR(40), nullable=False)
+    extraction_model: Mapped[str] = mapped_column(Text, nullable=False)
+    extraction_prompt: Mapped[str] = mapped_column(Text, nullable=False)
+    # LLM-extracted glob hints used by ``CandidateFilter`` to short-circuit
+    # blob/requirement pairings that are clearly out of scope. Persisted as a
+    # JSON array of strings; an empty list means "no constraint".
+    path_globs: Mapped[list[str]] = mapped_column(
+        JSON, nullable=False, default=list
+    )
+    extracted_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )

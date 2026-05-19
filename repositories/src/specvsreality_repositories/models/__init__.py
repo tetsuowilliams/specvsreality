@@ -1,21 +1,27 @@
-"""ORM models."""
+"""ORM models for the temporal spec / implementation tracker."""
 
-from specvsreality_repositories.models.artifact import Artifact
-from specvsreality_repositories.models.artifact_version import ArtifactVersion
 from specvsreality_repositories.models.base import Base
-from specvsreality_repositories.models.git_repo import GitRepo
-from specvsreality_repositories.models.implements import Implements
+from specvsreality_repositories.models.blob import Blob
+from specvsreality_repositories.models.commit import Commit
+from specvsreality_repositories.models.commit_file import CommitFile
+from specvsreality_repositories.models.commit_parent import CommitParent
+from specvsreality_repositories.models.implementation_claim import ImplementationClaim
+from specvsreality_repositories.models.ref import Ref
+from specvsreality_repositories.models.repository import Repository
 from specvsreality_repositories.models.requirement import Requirement
 from specvsreality_repositories.models.requirement_version import RequirementVersion
 from specvsreality_repositories.models.spec import Spec
 from specvsreality_repositories.models.spec_version import SpecVersion
 
 __all__ = [
-    "Artifact",
-    "ArtifactVersion",
     "Base",
-    "GitRepo",
-    "Implements",
+    "Blob",
+    "Commit",
+    "CommitFile",
+    "CommitParent",
+    "ImplementationClaim",
+    "Ref",
+    "Repository",
     "Requirement",
     "RequirementVersion",
     "Spec",

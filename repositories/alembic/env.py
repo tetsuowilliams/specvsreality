@@ -17,12 +17,19 @@ from alembic import context
 from sqlalchemy import create_engine, pool
 
 # Import models so metadata is populated
-from specvsreality_repositories.models import artifact as _artifact  # noqa: F401, E402
-from specvsreality_repositories.models import artifact_version as _artifact_version  # noqa: F401, E402
-from specvsreality_repositories.models import git_repo as _git_repo  # noqa: F401, E402
-from specvsreality_repositories.models import implements as _implements  # noqa: F401, E402
+from specvsreality_repositories.models import blob as _blob  # noqa: F401, E402
+from specvsreality_repositories.models import commit as _commit  # noqa: F401, E402
+from specvsreality_repositories.models import commit_file as _commit_file  # noqa: F401, E402
+from specvsreality_repositories.models import commit_parent as _commit_parent  # noqa: F401, E402
+from specvsreality_repositories.models import (
+    implementation_claim as _implementation_claim,  # noqa: F401, E402
+)
+from specvsreality_repositories.models import ref as _ref  # noqa: F401, E402
+from specvsreality_repositories.models import repository as _repository  # noqa: F401, E402
 from specvsreality_repositories.models import requirement as _requirement  # noqa: F401, E402
-from specvsreality_repositories.models import requirement_version as _requirement_version  # noqa: F401, E402
+from specvsreality_repositories.models import (
+    requirement_version as _requirement_version,  # noqa: F401, E402
+)
 from specvsreality_repositories.models import spec as _spec  # noqa: F401, E402
 from specvsreality_repositories.models import spec_version as _spec_version  # noqa: F401, E402
 from specvsreality_repositories.models.base import Base  # noqa: E402

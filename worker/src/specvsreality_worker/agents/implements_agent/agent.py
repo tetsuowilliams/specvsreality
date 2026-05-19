@@ -36,7 +36,7 @@ class ImplementsEvaluationAgent:
         name="implements-evaluation-agent",
         project_name=_OPIK_PROJECT,
         tags=["agent:implements-evaluation"],
-        ignore_arguments=("spec_md", "tasks_md", "plan_md", "artifact_sources"),
+        ignore_arguments=("spec_md", "tasks_md", "plan_md"),
     )
     def evaluate(
         self,

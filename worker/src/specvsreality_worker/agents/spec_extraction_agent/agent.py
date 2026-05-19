@@ -19,14 +19,14 @@ class SpecExtractionAgent:
             instrument=pydantic_ai_otlp_enabled,
             system_prompt=(
                 "Extract structured software specification information from markdown files. "
-                "Return a concise title, all functional requirements, and user acceptance scenarios. "
-                "For each functional requirement, preserve stable requirement IDs when present. "
-                "Each functional requirement must include path_globs: repository-relative glob "
-                "patterns (for example src/**/*.py, tests/**/*, frontend/src/**) that plausibly "
-                "cover implementation or tests for that requirement. Infer globs from the "
-                "requirement wording and from any file paths, components, or modules named in "
-                "tasks.md or plan.md; when unsure, propose a few broad patterns rather than leaving "
-                "path_globs empty."
+                "Return a concise title, all functional requirements, and user acceptance "
+                "scenarios. For each functional requirement, preserve stable requirement IDs "
+                "when present. Each functional requirement must include path_globs: "
+                "repository-relative glob patterns (for example src/**/*.py, tests/**/*, "
+                "frontend/src/**) that plausibly cover implementation or tests for that "
+                "requirement. Infer globs from the requirement wording and from any file "
+                "paths, components, or modules named in tasks.md or plan.md; when unsure, "
+                "propose a few broad patterns rather than leaving path_globs empty."
             ),
         )
 

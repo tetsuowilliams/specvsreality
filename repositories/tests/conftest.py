@@ -3,16 +3,18 @@
 from __future__ import annotations
 
 import os
+from collections.abc import Generator
 from pathlib import Path
-from typing import Generator
 
 import pytest
 from alembic import command
 from alembic.config import Config
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 from testcontainers.postgres import PostgresContainer
+
+from specvsreality_repositories.repos import RepositoryRepo
 
 
 def _to_sync_url(url: str) -> str:
@@ -63,22 +65,11 @@ def db_session(engine: Engine) -> Generator[Session, None, None]:
 
 
 @pytest.fixture()
-def git_repo_id(db_session: Session) -> int:
-    result = db_session.execute(
-        text(
-            """
-        INSERT INTO git_repo (name, url, cursor_position, location)
-        VALUES (:name, :url, :cursor_position, :location)
-        RETURNING id
-        """
-        ),
-        {
-            "name": "repo",
-            "url": "https://example.test/repo.git",
-            "cursor_position": "a" * 40,
-            "location": "/tmp/repo",
-        },
+def repository_id(db_session: Session) -> int:
+    """Create a tracked repository row for tests that need a parent FK."""
+    row = RepositoryRepo(db_session).add(
+        name="test-repo",
+        url="https://example.test/repo.git",
+        clone_location="/tmp/test-repo",
     )
-    row = result.fetchone()
-    assert row is not None
-    return int(row[0])
+    return int(row.id)

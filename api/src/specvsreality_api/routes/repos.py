@@ -1,4 +1,4 @@
-"""List and create tracked git repositories."""
+"""List and create tracked repositories."""
 
 from __future__ import annotations
 
@@ -6,15 +6,13 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from specvsreality_api.config import Settings, get_settings
 from specvsreality_api.deps.session import get_session
 from specvsreality_api.messaging.publisher import MessagePublisher, PikaMessagePublisher
 from specvsreality_messages import ScanRepoMessage
-from specvsreality_repositories.models.git_repo import GitRepo
-from specvsreality_repositories.repos import GitRepoRepo
+from specvsreality_repositories.repos import RepositoryRepo
 
 router = APIRouter(tags=["repos"])
 
@@ -23,8 +21,9 @@ class RepoListItem(BaseModel):
     id: int
     name: str
     url: str
-    cursor_position: str
-    location: str
+    default_branch: str
+    cursor_position: str | None = None
+    clone_location: str | None = None
 
 
 class CreateRepoRequest(BaseModel):
@@ -49,8 +48,7 @@ def _to_item(repo: object) -> RepoListItem:
 async def get_repos(
     session: Annotated[Session, Depends(get_session)],
 ) -> list[RepoListItem]:
-    stmt = select(GitRepo).order_by(GitRepo.name.asc(), GitRepo.id.asc())
-    rows = list(session.execute(stmt).scalars().all())
+    rows = RepositoryRepo(session).list_all()
     return [_to_item(row) for row in rows]
 
 
@@ -61,7 +59,7 @@ async def post_repos(
     settings: Annotated[Settings, Depends(get_settings)],
     publisher: Annotated[MessagePublisher, Depends(get_publisher)],
 ) -> CreateRepoResponse:
-    repo = GitRepoRepo(session).add(name=body.name, url=body.url)
+    repo = RepositoryRepo(session).add(name=body.name, url=body.url)
     session.commit()
     message = ScanRepoMessage(repo_id=str(repo.id))
     await publisher.publish(message.model_dump_json().encode("utf-8"), settings)
@@ -73,7 +71,7 @@ async def get_repo(
     repo_id: int,
     session: Annotated[Session, Depends(get_session)],
 ) -> RepoListItem:
-    row = GitRepoRepo(session).get_by_id(repo_id)
+    row = RepositoryRepo(session).get_by_id(repo_id)
     if row is None:
         raise HTTPException(status_code=404, detail=f"repo not found: {repo_id}")
     return _to_item(row)

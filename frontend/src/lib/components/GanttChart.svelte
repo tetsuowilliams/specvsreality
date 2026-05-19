@@ -1,6 +1,8 @@
 <script lang="ts">
 	import type { GanttChartResponse } from '$lib/api/repoCatalog';
-	import { buildSvelteGanttChartOptions } from '$lib/gantt/mapGanttApiToSvelteGantt';
+	import GanttSegmentTooltip from '$lib/components/GanttSegmentTooltip.svelte';
+	import { buildSvelteGanttChartOptions, type GanttTaskModel } from '$lib/gantt/mapGanttApiToSvelteGantt';
+	import type { GanttSegmentTooltip as GanttSegmentTooltipData } from '$lib/gantt/ganttSegmentTooltip';
 	import moment from 'moment';
 	import { MomentSvelteGanttDateAdapter, SvelteGantt, SvelteGanttTable } from 'svelte-gantt/svelte';
 
@@ -23,6 +25,52 @@
 	const ganttKey = $derived(
 		`${opts.from}|${opts.to}|${opts.tasks.map((t) => t.id).join('|')}|${opts.timeRanges.map((r) => r.id).join('|')}`
 	);
+
+	let activeTooltip: GanttSegmentTooltipData | null = $state(null);
+	let tooltipX = $state(0);
+	let tooltipY = $state(0);
+
+	function showTooltip(tip: GanttSegmentTooltipData, event: PointerEvent) {
+		activeTooltip = tip;
+		tooltipX = event.clientX;
+		tooltipY = event.clientY;
+	}
+
+	function moveTooltip(event: PointerEvent) {
+		tooltipX = event.clientX;
+		tooltipY = event.clientY;
+	}
+
+	function hideTooltip() {
+		activeTooltip = null;
+	}
+
+	/** svelte-gantt passes the task {@link TaskModel}, not a {@link SvelteTask} wrapper. */
+	function taskElementHook(node: HTMLElement, taskModel: GanttTaskModel) {
+		const tip = taskModel?.tooltip;
+		if (!tip) return {};
+
+		const onEnter = (event: PointerEvent) => showTooltip(tip, event);
+		const onMove = (event: PointerEvent) => {
+			if (activeTooltip === tip) moveTooltip(event);
+		};
+		const onLeave = () => {
+			if (activeTooltip === tip) hideTooltip();
+		};
+
+		node.addEventListener('pointerenter', onEnter);
+		node.addEventListener('pointermove', onMove);
+		node.addEventListener('pointerleave', onLeave);
+
+		return {
+			destroy() {
+				node.removeEventListener('pointerenter', onEnter);
+				node.removeEventListener('pointermove', onMove);
+				node.removeEventListener('pointerleave', onLeave);
+				if (activeTooltip === tip) hideTooltip();
+			}
+		};
+	}
 </script>
 
 <div class="gantt">
@@ -70,11 +118,16 @@
 					reflectOnParentRows={false}
 					reflectOnChildRows={false}
 					useCanvasColumns={false}
+					{taskElementHook}
 				/>
 			{/key}
 		</div>
 	</div>
 </div>
+
+{#if activeTooltip}
+	<GanttSegmentTooltip tooltip={activeTooltip} x={tooltipX} y={tooltipY} />
+{/if}
 
 <style>
 	.gantt {
@@ -190,6 +243,11 @@
 		border: 3px solid var(--specvsreality-gantt-track);
 		border-radius: 0.45rem;
 		box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
+		cursor: pointer;
+	}
+	:global(.specvsreality-gantt .sg-task:hover) {
+		filter: brightness(0.97);
+		box-shadow: 0 2px 6px rgba(15, 23, 42, 0.1);
 	}
 	:global(.specvsreality-gantt .gantt-status-ok) {
 		background: linear-gradient(180deg, #d1fae5 0%, #a7f3d0 100%) !important;

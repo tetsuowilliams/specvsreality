@@ -79,6 +79,41 @@
         "justMyCode": false
       },
       {
+        "name": "Worker: scan local repo (defaults)",
+        "type": "debugpy",
+        "request": "launch",
+        "module": "specvsreality_worker.scripts.scan_local",
+        "args": ["--reset", "--verbose"],
+        "cwd": "${workspaceFolder:worker}/..",
+        "python": "${workspaceFolder:worker}/../.venv/bin/python",
+        "console": "integratedTerminal",
+        "justMyCode": false,
+        "env": {
+          "PYTHONUNBUFFERED": "1"
+        }
+      },
+      {
+        "name": "Worker: scan local repo (custom)",
+        "type": "debugpy",
+        "request": "launch",
+        "module": "specvsreality_worker.scripts.scan_local",
+        "args": [
+          "--repo-url",
+          "${input:scanLocalRepoUrl}",
+          "--database-url",
+          "${input:scanLocalDatabaseUrl}",
+          "--reset",
+          "--verbose"
+        ],
+        "cwd": "${workspaceFolder:worker}/..",
+        "python": "${workspaceFolder:worker}/../.venv/bin/python",
+        "console": "integratedTerminal",
+        "justMyCode": false,
+        "env": {
+          "PYTHONUNBUFFERED": "1"
+        }
+      },
+      {
         "name": "Frontend (SvelteKit)",
         "type": "node",
         "request": "launch",
@@ -86,6 +121,20 @@
         "runtimeArgs": ["run", "dev"],
         "cwd": "${workspaceFolder:frontend}",
         "console": "integratedTerminal"
+      }
+    ],
+    "inputs": [
+      {
+        "id": "scanLocalRepoUrl",
+        "type": "promptString",
+        "description": "Git URL to clone and ingest",
+        "default": "https://github.com/tetsuowilliams/spec_test_toy"
+      },
+      {
+        "id": "scanLocalDatabaseUrl",
+        "type": "promptString",
+        "description": "SQLAlchemy DB URL",
+        "default": "postgresql+psycopg://specvsreality:specvsreality@localhost:5432/specvsreality"
       }
     ]
   }

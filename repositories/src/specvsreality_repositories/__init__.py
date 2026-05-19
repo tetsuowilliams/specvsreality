@@ -1,11 +1,14 @@
 """Database models and migration metadata."""
 
 from specvsreality_repositories.models import (
-    Artifact,
-    ArtifactVersion,
     Base,
-    GitRepo,
-    Implements,
+    Blob,
+    Commit,
+    CommitFile,
+    CommitParent,
+    ImplementationClaim,
+    Ref,
+    Repository,
     Requirement,
     RequirementVersion,
     Spec,
@@ -13,11 +16,14 @@ from specvsreality_repositories.models import (
 )
 
 __all__ = [
-    "Artifact",
-    "ArtifactVersion",
     "Base",
-    "GitRepo",
-    "Implements",
+    "Blob",
+    "Commit",
+    "CommitFile",
+    "CommitParent",
+    "ImplementationClaim",
+    "Ref",
+    "Repository",
     "Requirement",
     "RequirementVersion",
     "Spec",

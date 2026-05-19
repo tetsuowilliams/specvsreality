@@ -1,4 +1,4 @@
-"""Assemble gantt chart payload from repository reads."""
+"""Assemble gantt chart payload from the temporal schema."""
 
 from __future__ import annotations
 
@@ -17,14 +17,17 @@ from specvsreality_api.schemas.gantt import (
     GanttHistorySegment,
     GanttRequirementBlock,
 )
-from specvsreality_api.schemas.requirement_latest_version import RequirementLatestVersionResponse
-from specvsreality_repositories.models.artifact_version import ArtifactVersion
+from specvsreality_api.schemas.requirement_latest_version import (
+    RequirementLatestVersionResponse,
+)
 from specvsreality_repositories.models.requirement import Requirement
-from specvsreality_repositories.models.requirement_version import RequirementVersion
 from specvsreality_repositories.repos import (
-    VersionStatus,
+    GanttDataRepo,
+    RepositoryRepo,
+    SpecRepo,
+    Verdict,
     create_gantt_data_repo,
-    create_requirement_version_repo,
+    create_repository_repo,
     create_spec_repo,
 )
 
@@ -32,64 +35,27 @@ _STATUS_IMPLEMENTED = "implemented"
 _STATUS_NOT_IMPLEMENTED = "not_implemented"
 
 
-def _requirement_segment_status(
-    *,
-    requirement_version_id: int,
-    artifact_versions_by_rv: dict[int, list[ArtifactVersion]],
-) -> str:
-    for av in artifact_versions_by_rv.get(requirement_version_id, ()):
-        if av.status == VersionStatus.ACTIVE.value:
-            return _STATUS_IMPLEMENTED
-    return _STATUS_NOT_IMPLEMENTED
-
-
-def _history_for_requirement_versions(
-    versions: list[RequirementVersion],
-    *,
-    artifact_versions_by_rv: dict[int, list[ArtifactVersion]],
-    end_cap: datetime,
-) -> list[GanttHistorySegment]:
-    if not versions:
-        return []
-    out: list[GanttHistorySegment] = []
-    for i, rv in enumerate(versions):
-        start = rv.commit_datetime
-        end = versions[i + 1].commit_datetime if i + 1 < len(versions) else end_cap
-        status = _requirement_segment_status(
-            requirement_version_id=rv.id,
-            artifact_versions_by_rv=artifact_versions_by_rv,
-        )
-        out.append(GanttHistorySegment(start=start, end=end, status=status, commit=None))
-    return out
-
-
-def _history_for_artifact_versions(
-    versions: list[ArtifactVersion],
-    *,
-    end_cap: datetime,
-) -> list[GanttHistorySegment]:
-    if not versions:
-        return []
-    out: list[GanttHistorySegment] = []
-    for i, av in enumerate(versions):
-        start = av.commit_datetime
-        end = versions[i + 1].commit_datetime if i + 1 < len(versions) else end_cap
-        out.append(
-            GanttHistorySegment(
-                start=start,
-                end=end,
-                status=av.status,
-                commit=av.commit_id,
-            )
-        )
-    return out
-
-
 class GanttChartFacade:
+    """Reads the temporal schema and emits the front-end gantt response shape.
+
+    Behaviour, in plain English:
+
+    * One row per requirement: history is segmented per
+      ``RequirementVersion`` ordered by its ``SpecVersion.first_seen_at``,
+      with ``end`` set to the next version's start (or ``now`` for the latest).
+    * A segment is "implemented" when at least one current claim with
+      ``verdict=implements`` exists for that requirement version.
+    * Artifact blocks are derived by taking blobs implicated in any current
+      "implements" claim and emitting one block per distinct path that blob
+      has occupied in the repository's commit history. Each block's history
+      mirrors the requirement's segment timeline.
+    """
+
     def __init__(self, session: Session) -> None:
-        self._spec_repo = create_spec_repo(session)
-        self._gantt_data = create_gantt_data_repo(session)
-        self._requirement_versions = create_requirement_version_repo(session)
+        self._session = session
+        self._spec_repo: SpecRepo = create_spec_repo(session)
+        self._repository_repo: RepositoryRepo = create_repository_repo(session)
+        self._gantt: GanttDataRepo = create_gantt_data_repo(session)
 
     def _resolved_requirement(
         self,
@@ -98,23 +64,35 @@ class GanttChartFacade:
         requirement_id: int | None,
     ) -> Requirement:
         spec = self._spec_repo.get_by_id(spec_id)
-        if spec is None or spec.repo_id != repo_id:
+        if spec is None or spec.repository_id != repo_id:
             raise HTTPException(status_code=404, detail="spec not found")
 
-        requirements = self._gantt_data.list_requirements_for_spec_ordered(spec_id=spec_id)
+        requirements = self._gantt.list_requirements_for_spec_ordered(
+            spec_id=spec_id
+        )
         if not requirements:
             raise HTTPException(status_code=404, detail="no requirement for spec")
 
         if requirement_id is not None:
-            requirement = next((r for r in requirements if r.id == requirement_id), None)
+            requirement = next(
+                (r for r in requirements if r.id == requirement_id), None
+            )
             if requirement is None:
-                raise HTTPException(status_code=404, detail="requirement not found for this spec")
+                raise HTTPException(
+                    status_code=404,
+                    detail="requirement not found for this spec",
+                )
             return requirement
+
         if len(requirements) == 1:
             return requirements[0]
+
         raise HTTPException(
             status_code=400,
-            detail="requirement_id query parameter is required when the spec has more than one requirement",
+            detail=(
+                "requirement_id query parameter is required when the spec has "
+                "more than one requirement"
+            ),
         )
 
     def get_requirement_latest_version(
@@ -125,14 +103,19 @@ class GanttChartFacade:
         requirement_id: int | None = None,
     ) -> RequirementLatestVersionResponse:
         requirement = self._resolved_requirement(repo_id, spec_id, requirement_id)
-        rv = self._requirement_versions.get_latest_for_requirement(requirement_id=requirement.id)
-        if rv is None:
-            raise HTTPException(status_code=404, detail="no requirement version found")
+        anchored = self._gantt.list_versions_with_anchor_for_requirement(
+            requirement_id=requirement.id
+        )
+        if not anchored:
+            raise HTTPException(
+                status_code=404, detail="no requirement version found"
+            )
+        latest_rv, latest_sv = anchored[-1]
         return RequirementLatestVersionResponse(
-            paper_id=requirement.paper_id,
-            requirement_text=rv.requirement_text,
-            commit_id=rv.commit_id,
-            commit_datetime=rv.commit_datetime,
+            paper_id=requirement.external_id,
+            requirement_text=latest_rv.content,
+            commit_id=latest_sv.first_seen_commit,
+            commit_datetime=latest_sv.first_seen_at,
         )
 
     def get_chart(
@@ -143,62 +126,122 @@ class GanttChartFacade:
         requirement_id: int | None = None,
         now: datetime | None = None,
     ) -> GanttChartResponse:
+        if self._repository_repo.get_by_id(repo_id) is None:
+            raise HTTPException(status_code=404, detail="repo not found")
+
         effective_now = now if now is not None else datetime.now(UTC)
         if effective_now.tzinfo is None:
             effective_now = effective_now.replace(tzinfo=UTC)
 
         requirement = self._resolved_requirement(repo_id, spec_id, requirement_id)
-
-        req_versions = self._gantt_data.list_requirement_versions_ordered(
-            requirement_id=requirement.id,
+        anchored = self._gantt.list_versions_with_anchor_for_requirement(
+            requirement_id=requirement.id
         )
-        rv_ids = [rv.id for rv in req_versions]
-        impl_rows = self._gantt_data.list_implements_with_artifact_versions(
+
+        rv_ids = [rv.id for rv, _sv in anchored]
+        latest_claims = self._gantt.latest_claims_for_requirement_versions(
             requirement_version_ids=rv_ids,
         )
 
-        artifact_versions_by_rv: dict[int, list[ArtifactVersion]] = defaultdict(list)
-        filepath_by_artifact_id: dict[int, str] = {}
-        for _impl, av, art in impl_rows:
-            artifact_versions_by_rv[_impl.requirement_version_id].append(av)
-            filepath_by_artifact_id[av.artifact_id] = art.filepath
+        implements_blobs_by_rv: dict[int, set[str]] = defaultdict(set)
+        for claim in latest_claims:
+            if claim.verdict == Verdict.IMPLEMENTS.value:
+                implements_blobs_by_rv[claim.requirement_version_id].add(
+                    claim.blob_sha
+                )
 
-        req_history = _history_for_requirement_versions(
-            req_versions,
-            artifact_versions_by_rv=artifact_versions_by_rv,
-            end_cap=effective_now,
-        )
-        last_status = req_history[-1].status if req_history else _STATUS_NOT_IMPLEMENTED
+        segments: list[GanttHistorySegment] = []
+        for index, (rv, sv) in enumerate(anchored):
+            start = sv.first_seen_at
+            end = (
+                anchored[index + 1][1].first_seen_at
+                if index + 1 < len(anchored)
+                else effective_now
+            )
+            status = (
+                _STATUS_IMPLEMENTED
+                if implements_blobs_by_rv.get(rv.id)
+                else _STATUS_NOT_IMPLEMENTED
+            )
+            segments.append(
+                GanttHistorySegment(
+                    start=start,
+                    end=end,
+                    status=status,
+                    commit=sv.first_seen_commit,
+                    requirement_text=rv.content,
+                    blob_sha=None,
+                )
+            )
+
+        last_status = segments[-1].status if segments else _STATUS_NOT_IMPLEMENTED
         meta = GanttChartMeta(
-            requirement_implemented=(last_status == _STATUS_IMPLEMENTED),
+            requirement_implemented=(last_status == _STATUS_IMPLEMENTED)
         )
 
         requirement_block = GanttRequirementBlock(
-            paper_id=requirement.paper_id,
-            history=req_history,
+            paper_id=requirement.external_id,
+            history=segments,
         )
 
-        artifact_ids = sorted(
-            filepath_by_artifact_id.keys(),
-            key=lambda aid: filepath_by_artifact_id[aid],
+        all_implements_blobs = {
+            blob for blobs in implements_blobs_by_rv.values() for blob in blobs
+        }
+        paths_by_blob = self._gantt.list_paths_for_blobs_in_repo(
+            repository_id=repo_id,
+            blob_shas=sorted(all_implements_blobs),
         )
-        all_versions = self._gantt_data.list_artifact_versions_for_artifact_ids_ordered(
-            artifact_ids=artifact_ids,
-        )
-        versions_by_artifact: dict[int, list[ArtifactVersion]] = defaultdict(list)
-        for av in all_versions:
-            versions_by_artifact[av.artifact_id].append(av)
 
-        artifacts: list[GanttArtifactBlock] = []
-        for aid in artifact_ids:
-            fp = filepath_by_artifact_id[aid]
-            segs = _history_for_artifact_versions(
-                versions_by_artifact.get(aid, []),
-                end_cap=effective_now,
+        artifacts = self._build_artifacts(
+            anchored=anchored,
+            implements_blobs_by_rv=implements_blobs_by_rv,
+            paths_by_blob=paths_by_blob,
+            end_cap=effective_now,
+        )
+
+        return GanttChartResponse(
+            meta=meta, requirement=requirement_block, artifacts=artifacts
+        )
+
+    @staticmethod
+    def _build_artifacts(
+        *,
+        anchored: list,
+        implements_blobs_by_rv: dict[int, set[str]],
+        paths_by_blob: dict[str, list[tuple[str, str]]],
+        end_cap: datetime,
+    ) -> list[GanttArtifactBlock]:
+        path_segments: dict[str, list[GanttHistorySegment]] = defaultdict(list)
+
+        for index, (rv, sv) in enumerate(anchored):
+            start = sv.first_seen_at
+            end = (
+                anchored[index + 1][1].first_seen_at
+                if index + 1 < len(anchored)
+                else end_cap
             )
-            artifacts.append(GanttArtifactBlock(filepath=fp, history=segs))
+            blobs = implements_blobs_by_rv.get(rv.id, set())
+            seen_paths_in_segment: set[str] = set()
+            for blob in blobs:
+                for commit_sha, path in paths_by_blob.get(blob, []):
+                    if path in seen_paths_in_segment:
+                        continue
+                    seen_paths_in_segment.add(path)
+                    path_segments[path].append(
+                        GanttHistorySegment(
+                            start=start,
+                            end=end,
+                            status="active",
+                            commit=commit_sha,
+                            requirement_text=None,
+                            blob_sha=blob,
+                        )
+                    )
 
-        return GanttChartResponse(meta=meta, requirement=requirement_block, artifacts=artifacts)
+        return [
+            GanttArtifactBlock(filepath=path, history=path_segments[path])
+            for path in sorted(path_segments.keys())
+        ]
 
 
 def create_gantt_chart_facade(session: Session) -> GanttChartFacade:

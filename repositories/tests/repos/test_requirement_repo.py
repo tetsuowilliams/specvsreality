@@ -1,51 +1,35 @@
-"""Tests for `RequirementRepo`."""
+"""Tests for ``RequirementRepo``."""
 
 from __future__ import annotations
 
+import pytest
 from sqlalchemy.orm import Session
 
-from specvsreality_repositories.repos import create_requirement_repo, create_spec_repo
+from specvsreality_repositories.repos import RequirementRepo, SpecRepo
 
 
-def test_get_by_id_returns_row_after_add(db_session: Session, git_repo_id: int) -> None:
-    spec = create_spec_repo(db_session).add(paper_id="0001-req", repo_id=git_repo_id)
-    repo = create_requirement_repo(db_session)
-    row = repo.add(spec_id=spec.id, paper_id="FR-1")
-
-    assert repo.get_by_id(row.id) == row
-
-
-def test_get_by_id_returns_none_when_missing(db_session: Session) -> None:
-    repo = create_requirement_repo(db_session)
-    assert repo.get_by_id(999_999_999) is None
-
-
-def test_get_by_spec_and_paper_id_returns_matching_row(db_session: Session, git_repo_id: int) -> None:
-    spec = create_spec_repo(db_session).add(paper_id="0001-scope", repo_id=git_repo_id)
-    repo = create_requirement_repo(db_session)
-    row = repo.add(spec_id=spec.id, paper_id="FR-9")
-
-    assert repo.get_by_spec_and_paper_id(spec_id=spec.id, paper_id="FR-9") == row
+@pytest.fixture()
+def spec_id(db_session: Session, repository_id: int) -> int:
+    spec = SpecRepo(db_session).get_or_create(
+        repository_id=repository_id,
+        name="auth",
+        spec_path="specs/auth/spec.md",
+        plan_path="specs/auth/plan.md",
+        tasks_path="specs/auth/tasks.md",
+    )
+    return int(spec.id)
 
 
-def test_get_by_spec_and_paper_id_returns_none_when_paper_id_differs(
-    db_session: Session,
-    git_repo_id: int,
-) -> None:
-    spec = create_spec_repo(db_session).add(paper_id="0001-scope2", repo_id=git_repo_id)
-    repo = create_requirement_repo(db_session)
-    repo.add(spec_id=spec.id, paper_id="FR-1")
-
-    assert repo.get_by_spec_and_paper_id(spec_id=spec.id, paper_id="FR-999") is None
+def test_get_or_create_is_idempotent(db_session: Session, spec_id: int) -> None:
+    repo = RequirementRepo(db_session)
+    first = repo.get_or_create(spec_id=spec_id, external_id="FR-001")
+    second = repo.get_or_create(spec_id=spec_id, external_id="FR-001")
+    assert first.id == second.id
 
 
-def test_get_by_spec_and_paper_id_returns_none_when_spec_id_differs(
-    db_session: Session,
-    git_repo_id: int,
-) -> None:
-    spec_a = create_spec_repo(db_session).add(paper_id="0001-sa", repo_id=git_repo_id)
-    spec_b = create_spec_repo(db_session).add(paper_id="0001-sb", repo_id=git_repo_id)
-    repo = create_requirement_repo(db_session)
-    repo.add(spec_id=spec_a.id, paper_id="SHARED")
-
-    assert repo.get_by_spec_and_paper_id(spec_id=spec_b.id, paper_id="SHARED") is None
+def test_list_for_spec(db_session: Session, spec_id: int) -> None:
+    repo = RequirementRepo(db_session)
+    repo.get_or_create(spec_id=spec_id, external_id="FR-002")
+    repo.get_or_create(spec_id=spec_id, external_id="FR-001")
+    rows = repo.list_for_spec(spec_id=spec_id)
+    assert [r.external_id for r in rows] == ["FR-001", "FR-002"]

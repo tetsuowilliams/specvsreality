@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 from collections.abc import Generator
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -19,10 +20,12 @@ from specvsreality_api.deps.session import get_session
 from specvsreality_api.main import create_app
 from specvsreality_api.routes import health
 from specvsreality_repositories.repos import (
-    create_git_repo_repo,
-    create_requirement_repo,
-    create_spec_repo,
-    create_spec_version_repo,
+    BlobRepo,
+    CommitRepo,
+    RepositoryRepo,
+    RequirementRepo,
+    SpecRepo,
+    SpecVersionRepo,
 )
 
 os.environ.setdefault("TESTCONTAINERS_RYUK_DISABLED", "true")
@@ -95,47 +98,72 @@ def catalog_client(db_session: Session) -> Generator[TestClient, None, None]:
     app.dependency_overrides.clear()
 
 
-def test_get_repo_catalog_and_spec_detail(catalog_client: TestClient, db_session: Session) -> None:
-    gid = create_git_repo_repo(db_session).add(
-        name="c1",
-        url="https://example.test/c1.git",
-        cursor_position="a" * 40,
-        location="/tmp/c1",
-    ).id
-    spec = create_spec_repo(db_session).add(paper_id="paper-1", repo_id=gid)
-    create_requirement_repo(db_session).add(spec_id=spec.id, paper_id="req-a")
-    create_requirement_repo(db_session).add(spec_id=spec.id, paper_id="req-b")
-    create_spec_version_repo(db_session).add(
-        spec_id=spec.id,
-        spec_md="# s",
-        tasks_md="- t",
-        plan_md="p",
+def _seed_spec_with_two_versions(
+    db_session: Session,
+) -> tuple[int, int]:
+    """Create a repository + spec + two spec versions; return (repo_id, spec_id)."""
+    repository = RepositoryRepo(db_session).add(
+        name="c1", url="https://example.test/c1.git"
     )
-    create_spec_version_repo(db_session).add(
-        spec_id=spec.id,
-        spec_md="# s2",
-        tasks_md=None,
-        plan_md=None,
-    )
+    blobs = BlobRepo(db_session)
+    blob_specs = ["a" * 40, "b" * 40, "c" * 40, "d" * 40, "e" * 40, "f" * 40]
+    for sha in blob_specs:
+        blobs.upsert(sha=sha, size_bytes=1)
+    commits = CommitRepo(db_session)
+    commit_one = "1" * 40
+    commit_two = "2" * 40
+    commits.insert(sha=commit_one, repository_id=repository.id, commit_date=datetime.now(UTC))
+    commits.insert(sha=commit_two, repository_id=repository.id, commit_date=datetime.now(UTC))
 
-    cat = catalog_client.get(f"/repos/{gid}/catalog")
+    spec = SpecRepo(db_session).get_or_create(
+        repository_id=repository.id,
+        name="paper-1",
+        spec_path="specs/paper-1/spec.md",
+        plan_path="specs/paper-1/plan.md",
+        tasks_path="specs/paper-1/tasks.md",
+    )
+    requirement_repo = RequirementRepo(db_session)
+    requirement_repo.get_or_create(spec_id=spec.id, external_id="req-a")
+    requirement_repo.get_or_create(spec_id=spec.id, external_id="req-b")
+    sv_repo = SpecVersionRepo(db_session)
+    sv_repo.insert(
+        spec_id=spec.id,
+        spec_blob_sha=blob_specs[0],
+        plan_blob_sha=blob_specs[1],
+        tasks_blob_sha=blob_specs[2],
+        first_seen_commit=commit_one,
+        first_seen_at=datetime(2026, 1, 1, tzinfo=UTC),
+    )
+    sv_repo.insert(
+        spec_id=spec.id,
+        spec_blob_sha=blob_specs[3],
+        plan_blob_sha=blob_specs[4],
+        tasks_blob_sha=blob_specs[5],
+        first_seen_commit=commit_two,
+        first_seen_at=datetime(2026, 2, 1, tzinfo=UTC),
+    )
+    return int(repository.id), int(spec.id)
+
+
+def test_get_repo_catalog_and_spec_detail(
+    catalog_client: TestClient, db_session: Session
+) -> None:
+    repo_id, spec_id = _seed_spec_with_two_versions(db_session)
+
+    cat = catalog_client.get(f"/repos/{repo_id}/catalog")
     assert cat.status_code == 200
     body = cat.json()
     assert len(body["specs"]) == 1
     assert body["specs"][0]["paper_id"] == "paper-1"
     assert len(body["specs"][0]["requirements"]) == 2
 
-    detail = catalog_client.get(f"/repos/{gid}/specs/{spec.id}")
+    detail = catalog_client.get(f"/repos/{repo_id}/specs/{spec_id}")
     assert detail.status_code == 200
     d = detail.json()
     assert d["paper_id"] == "paper-1"
     assert len(d["versions"]) == 2
-    assert d["versions"][0]["spec_md"] == "# s"
-    assert d["versions"][0]["tasks_md"] == "- t"
-    assert d["versions"][0]["plan_md"] == "p"
-    assert d["versions"][1]["spec_md"] == "# s2"
-    assert d["versions"][1]["tasks_md"] is None
-    assert d["versions"][1]["plan_md"] is None
+    assert d["versions"][0]["spec_blob_sha"] == "a" * 40
+    assert d["versions"][1]["spec_blob_sha"] == "d" * 40
 
 
 def test_catalog_unknown_repo_404(catalog_client: TestClient) -> None:
@@ -144,18 +172,14 @@ def test_catalog_unknown_repo_404(catalog_client: TestClient) -> None:
 
 
 def test_spec_detail_wrong_repo_404(catalog_client: TestClient, db_session: Session) -> None:
-    g1 = create_git_repo_repo(db_session).add(
-        name="g1",
-        url="https://example.test/g1.git",
-        cursor_position="b" * 40,
-        location="/tmp/g1",
-    ).id
-    g2 = create_git_repo_repo(db_session).add(
-        name="g2",
-        url="https://example.test/g2.git",
-        cursor_position="c" * 40,
-        location="/tmp/g2",
-    ).id
-    spec = create_spec_repo(db_session).add(paper_id="p", repo_id=g1)
-    r = catalog_client.get(f"/repos/{g2}/specs/{spec.id}")
+    repo_a = RepositoryRepo(db_session).add(name="g1", url="https://example.test/g1.git")
+    repo_b = RepositoryRepo(db_session).add(name="g2", url="https://example.test/g2.git")
+    spec = SpecRepo(db_session).get_or_create(
+        repository_id=repo_a.id,
+        name="p",
+        spec_path="specs/p/spec.md",
+        plan_path="specs/p/plan.md",
+        tasks_path="specs/p/tasks.md",
+    )
+    r = catalog_client.get(f"/repos/{repo_b.id}/specs/{spec.id}")
     assert r.status_code == 404

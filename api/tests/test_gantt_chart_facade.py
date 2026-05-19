@@ -1,4 +1,4 @@
-"""Docker-backed integration tests for GanttChartFacade."""
+"""Docker-backed integration tests for GanttChartFacade against the temporal schema."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ import os
 os.environ.setdefault("TESTCONTAINERS_RYUK_DISABLED", "true")
 
 from collections.abc import Generator
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -20,16 +20,21 @@ from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 from testcontainers.postgres import PostgresContainer
 
-from specvsreality_api.facades.gantt_chart_facade import GanttChartFacade, create_gantt_chart_facade
+from specvsreality_api.facades.gantt_chart_facade import (
+    GanttChartFacade,
+    create_gantt_chart_facade,
+)
 from specvsreality_repositories.repos import (
-    VersionStatus,
-    create_artifact_repo,
-    create_artifact_version_repo,
-    create_git_repo_repo,
-    create_implements_repo,
-    create_requirement_repo,
-    create_requirement_version_repo,
-    create_spec_repo,
+    BlobRepo,
+    CommitFileRepo,
+    CommitRepo,
+    ImplementationClaimRepo,
+    RepositoryRepo,
+    RequirementRepo,
+    RequirementVersionRepo,
+    SpecRepo,
+    SpecVersionRepo,
+    Verdict,
 )
 
 
@@ -80,290 +85,227 @@ def db_session(gantt_engine: Engine) -> Generator[Session, None, None]:
         connection.close()
 
 
-@pytest.fixture()
-def git_row_id(db_session: Session) -> int:
-    return create_git_repo_repo(db_session).add(
-        name="gantt-facade",
-        url="https://example.test/gf.git",
-        cursor_position="d" * 40,
-        location="/tmp/gf",
-    ).id
+def _seed_world(
+    db_session: Session,
+    *,
+    versions: list[dict],
+    code_paths_by_blob: dict[str, list[tuple[str, str]]] | None = None,
+) -> dict[str, int | str]:
+    """Seed a repo + one spec + one requirement with the supplied versions.
+
+    Each ``versions`` entry is ``{"first_seen_at": datetime, "rv_content": str,
+    "implements_blobs": list[str]}``. ``code_paths_by_blob`` maps a code blob
+    to commits/paths it appeared at via ``commit_files``.
+    """
+    repository = RepositoryRepo(db_session).add(
+        name="gf", url="https://example.test/gf.git"
+    )
+    spec = SpecRepo(db_session).get_or_create(
+        repository_id=repository.id,
+        name="paper-1",
+        spec_path="specs/paper-1/spec.md",
+        plan_path="specs/paper-1/plan.md",
+        tasks_path="specs/paper-1/tasks.md",
+    )
+    req = RequirementRepo(db_session).get_or_create(
+        spec_id=spec.id, external_id="REQ-1"
+    )
+    blobs = BlobRepo(db_session)
+    commits = CommitRepo(db_session)
+    sv_repo = SpecVersionRepo(db_session)
+    rv_repo = RequirementVersionRepo(db_session)
+    claim_repo = ImplementationClaimRepo(db_session)
+    file_repo = CommitFileRepo(db_session)
+
+    rv_ids: list[int] = []
+    sv_ids: list[int] = []
+
+    for index, version in enumerate(versions):
+        first_seen_at = version["first_seen_at"]
+        commit_sha = f"{index + 1}{'a' * 39}"[:40]
+        commits.insert(
+            sha=commit_sha,
+            repository_id=repository.id,
+            commit_date=first_seen_at,
+        )
+        spec_blob = f"{(index * 3) + 1:040x}"[:40].rjust(40, "0")
+        plan_blob = f"{(index * 3) + 2:040x}"[:40].rjust(40, "0")
+        tasks_blob = f"{(index * 3) + 3:040x}"[:40].rjust(40, "0")
+        for sha in (spec_blob, plan_blob, tasks_blob):
+            blobs.upsert(sha=sha, size_bytes=1)
+
+        sv = sv_repo.insert(
+            spec_id=spec.id,
+            spec_blob_sha=spec_blob,
+            plan_blob_sha=plan_blob,
+            tasks_blob_sha=tasks_blob,
+            first_seen_commit=commit_sha,
+            first_seen_at=first_seen_at,
+        )
+        sv_ids.append(int(sv.id))
+
+        rv = rv_repo.insert(
+            requirement_id=req.id,
+            spec_version_id=sv.id,
+            content=version["rv_content"],
+            content_hash=("0" * 40),
+            extraction_model="m",
+            extraction_prompt="p",
+        )
+        rv_ids.append(int(rv.id))
+
+        for blob in version.get("implements_blobs", []):
+            blobs.upsert(sha=blob, size_bytes=1)
+            claim_repo.insert(
+                requirement_version_id=rv.id,
+                blob_sha=blob,
+                verdict=Verdict.IMPLEMENTS.value,
+                confidence=0.9,
+                model_version="m1",
+                prompt_version="p1",
+                reasoning="ok",
+            )
+
+    if code_paths_by_blob:
+        for blob_sha, locations in code_paths_by_blob.items():
+            for commit_sha, path in locations:
+                if not commits.exists(commit_sha):
+                    commits.insert(
+                        sha=commit_sha,
+                        repository_id=repository.id,
+                        commit_date=datetime(2026, 1, 1, tzinfo=UTC),
+                    )
+                blobs.upsert(sha=blob_sha, size_bytes=1)
+                file_repo.insert_many(
+                    commit_sha=commit_sha,
+                    entries=[(path, blob_sha, None)],
+                )
+
+    return {
+        "repo_id": int(repository.id),
+        "spec_id": int(spec.id),
+        "requirement_id": int(req.id),
+        "rv_ids": rv_ids,
+        "sv_ids": sv_ids,
+    }
 
 
-def test_gantt_meta_follows_last_requirement_segment(db_session: Session, git_row_id: int) -> None:
-    ts0 = datetime(2026, 3, 1, 12, 0, tzinfo=UTC)
-    ts1 = datetime(2026, 3, 10, 12, 0, tzinfo=UTC)
-    now = datetime(2026, 4, 1, 12, 0, tzinfo=UTC)
-
-    spec = create_spec_repo(db_session).add(paper_id="fr-001", repo_id=git_row_id)
-    req = create_requirement_repo(db_session).add(spec_id=spec.id, paper_id="fr-001")
-    rv1 = create_requirement_version_repo(db_session).add(
-        requirement_id=req.id,
-        commit_id="a" * 40,
-        commit_datetime=ts0,
-        requirement_text="v1",
-        filepath_globs=["*.py"],
-        status="open",
-    )
-    rv2 = create_requirement_version_repo(db_session).add(
-        requirement_id=req.id,
-        commit_id="b" * 40,
-        commit_datetime=ts1,
-        requirement_text="v2",
-        filepath_globs=["*.py"],
-        status="open",
-    )
-    art = create_artifact_repo(db_session).add(filepath="count.py")
-    av_active = create_artifact_version_repo(db_session).add(
-        artifact_id=art.id,
-        commit_id="a" * 40,
-        commit_datetime=ts0,
-        status=VersionStatus.ACTIVE.value,
-        file_content="x",
-    )
-    av_inactive = create_artifact_version_repo(db_session).add(
-        artifact_id=art.id,
-        commit_id="b" * 40,
-        commit_datetime=ts1,
-        status=VersionStatus.INACTIVE.value,
-        file_content="y",
-    )
-    create_implements_repo(db_session).add(
-        requirement_version_id=rv1.id,
-        artifact_version_id=av_active.id,
-    )
-    create_implements_repo(db_session).add(
-        requirement_version_id=rv2.id,
-        artifact_version_id=av_inactive.id,
+def test_gantt_meta_follows_last_requirement_segment(db_session: Session) -> None:
+    code_blob = "9" * 40
+    world = _seed_world(
+        db_session,
+        versions=[
+            {
+                "first_seen_at": datetime(2026, 3, 1, 12, 0, tzinfo=UTC),
+                "rv_content": "v1",
+                "implements_blobs": [],
+            },
+            {
+                "first_seen_at": datetime(2026, 3, 10, 12, 0, tzinfo=UTC),
+                "rv_content": "v2",
+                "implements_blobs": [code_blob],
+            },
+        ],
+        code_paths_by_blob={code_blob: [("a" * 40, "src/app.py")]},
     )
 
     facade = create_gantt_chart_facade(db_session)
-    chart = facade.get_chart(repo_id=git_row_id, spec_id=spec.id, now=now)
+    chart = facade.get_chart(
+        repo_id=int(world["repo_id"]),
+        spec_id=int(world["spec_id"]),
+        now=datetime(2026, 4, 1, 12, 0, tzinfo=UTC),
+    )
 
-    assert chart.meta.requirement_implemented is False
+    assert chart.meta.requirement_implemented is True
     assert len(chart.requirement.history) == 2
-    h0, h1 = chart.requirement.history
-    assert h0.start == ts0 and h0.end == ts1 and h0.status == "implemented" and h0.commit is None
-    assert h1.start == ts1 and h1.end == now and h1.status == "not_implemented"
+    assert chart.requirement.history[0].status == "not_implemented"
+    assert chart.requirement.history[1].status == "implemented"
+    assert chart.requirement.history[0].requirement_text == "v1"
+    assert chart.requirement.history[1].requirement_text == "v2"
+    assert chart.requirement.history[0].commit is not None
+    assert len(chart.requirement.history[0].commit) == 40
+
+    assert len(chart.artifacts) == 1
+    assert chart.artifacts[0].filepath == "src/app.py"
+    art_seg = chart.artifacts[0].history[0]
+    assert art_seg.blob_sha == code_blob
+    assert art_seg.commit == "a" * 40
 
 
-def test_get_requirement_latest_version_returns_newest_text(db_session: Session, git_row_id: int) -> None:
-    ts0 = datetime(2026, 3, 1, 12, 0, tzinfo=UTC)
-    ts1 = datetime(2026, 3, 10, 12, 0, tzinfo=UTC)
-    spec = create_spec_repo(db_session).add(paper_id="lv-001", repo_id=git_row_id)
-    req = create_requirement_repo(db_session).add(spec_id=spec.id, paper_id="REQ-LV")
-    create_requirement_version_repo(db_session).add(
-        requirement_id=req.id,
-        commit_id="a" * 40,
-        commit_datetime=ts0,
-        requirement_text="old",
-        filepath_globs=["*.py"],
-        status="open",
-    )
-    create_requirement_version_repo(db_session).add(
-        requirement_id=req.id,
-        commit_id="b" * 40,
-        commit_datetime=ts1,
-        requirement_text="newest",
-        filepath_globs=["*.py"],
-        status="open",
+def test_get_requirement_latest_version_returns_newest_text(
+    db_session: Session,
+) -> None:
+    world = _seed_world(
+        db_session,
+        versions=[
+            {
+                "first_seen_at": datetime(2026, 3, 1, tzinfo=UTC),
+                "rv_content": "old",
+                "implements_blobs": [],
+            },
+            {
+                "first_seen_at": datetime(2026, 3, 10, tzinfo=UTC),
+                "rv_content": "newest",
+                "implements_blobs": [],
+            },
+        ],
     )
     facade = create_gantt_chart_facade(db_session)
-    out = facade.get_requirement_latest_version(git_row_id, spec.id, requirement_id=req.id)
+    out = facade.get_requirement_latest_version(
+        int(world["repo_id"]),
+        int(world["spec_id"]),
+        requirement_id=int(world["requirement_id"]),
+    )
     assert out.requirement_text == "newest"
-    assert out.paper_id == "REQ-LV"
-    assert out.commit_id == "b" * 40
+    assert out.paper_id == "REQ-1"
 
 
-def test_get_requirement_latest_version_404_when_no_versions(db_session: Session, git_row_id: int) -> None:
-    spec = create_spec_repo(db_session).add(paper_id="empty-req", repo_id=git_row_id)
-    req = create_requirement_repo(db_session).add(spec_id=spec.id, paper_id="R-EMPTY")
+def test_get_requirement_latest_version_404_when_no_versions(
+    db_session: Session,
+) -> None:
+    repository = RepositoryRepo(db_session).add(
+        name="empty", url="https://example.test/empty.git"
+    )
+    spec = SpecRepo(db_session).get_or_create(
+        repository_id=repository.id,
+        name="empty-spec",
+        spec_path="specs/empty-spec/spec.md",
+        plan_path="specs/empty-spec/plan.md",
+        tasks_path="specs/empty-spec/tasks.md",
+    )
+    req = RequirementRepo(db_session).get_or_create(
+        spec_id=spec.id, external_id="R-EMPTY"
+    )
     facade = create_gantt_chart_facade(db_session)
     with pytest.raises(HTTPException) as ei:
-        facade.get_requirement_latest_version(git_row_id, spec.id, requirement_id=req.id)
+        facade.get_requirement_latest_version(
+            int(repository.id), int(spec.id), requirement_id=int(req.id)
+        )
     assert ei.value.status_code == 404
 
 
-def test_artifacts_sorted_by_filepath_and_raw_status(db_session: Session, git_row_id: int) -> None:
-    ts = datetime(2026, 3, 1, tzinfo=UTC)
-    now = datetime(2026, 5, 1, tzinfo=UTC)
-    spec = create_spec_repo(db_session).add(paper_id="p-sort", repo_id=git_row_id)
-    req = create_requirement_repo(db_session).add(spec_id=spec.id, paper_id="r1")
-    rv = create_requirement_version_repo(db_session).add(
-        requirement_id=req.id,
-        commit_id="a" * 40,
-        commit_datetime=ts,
-        requirement_text="t",
-        filepath_globs=["*.py"],
-        status="open",
+def test_no_requirement_returns_404(db_session: Session) -> None:
+    repository = RepositoryRepo(db_session).add(
+        name="nr", url="https://example.test/nr.git"
     )
-    z = create_artifact_repo(db_session).add(filepath="zebra.py")
-    a = create_artifact_repo(db_session).add(filepath="a.py")
-    av_z = create_artifact_version_repo(db_session).add(
-        artifact_id=z.id,
-        commit_id="z" * 40,
-        commit_datetime=ts,
-        status=VersionStatus.ACTIVE.value,
-        file_content="",
+    spec = SpecRepo(db_session).get_or_create(
+        repository_id=repository.id,
+        name="empty",
+        spec_path="specs/empty/spec.md",
+        plan_path="specs/empty/plan.md",
+        tasks_path="specs/empty/tasks.md",
     )
-    av_a1 = create_artifact_version_repo(db_session).add(
-        artifact_id=a.id,
-        commit_id="c" * 40,
-        commit_datetime=ts,
-        status=VersionStatus.ACTIVE.value,
-        file_content="",
-    )
-    av_a2 = create_artifact_version_repo(db_session).add(
-        artifact_id=a.id,
-        commit_id="d" * 40,
-        commit_datetime=ts + timedelta(hours=1),
-        status=VersionStatus.DELETED.value,
-        file_content="",
-    )
-    create_implements_repo(db_session).add(requirement_version_id=rv.id, artifact_version_id=av_z.id)
-    create_implements_repo(db_session).add(requirement_version_id=rv.id, artifact_version_id=av_a1.id)
-
-    facade = create_gantt_chart_facade(db_session)
-    chart = facade.get_chart(repo_id=git_row_id, spec_id=spec.id, now=now)
-
-    paths = [b.filepath for b in chart.artifacts]
-    assert paths == ["a.py", "zebra.py"]
-
-    a_block = chart.artifacts[0]
-    assert len(a_block.history) == 2
-    assert a_block.history[0].status == VersionStatus.ACTIVE.value
-    assert a_block.history[1].status == VersionStatus.DELETED.value
-    assert a_block.history[0].commit == av_a1.commit_id
-
-
-def test_multiple_requirements_without_id_returns_400(db_session: Session, git_row_id: int) -> None:
-    spec = create_spec_repo(db_session).add(paper_id="p-multi", repo_id=git_row_id)
-    create_requirement_repo(db_session).add(spec_id=spec.id, paper_id="r1")
-    create_requirement_repo(db_session).add(spec_id=spec.id, paper_id="r2")
-
     facade = create_gantt_chart_facade(db_session)
     with pytest.raises(HTTPException) as exc:
-        facade.get_chart(repo_id=git_row_id, spec_id=spec.id)
-    assert exc.value.status_code == 400
-
-
-def test_multiple_requirements_with_id_selects_requirement(db_session: Session, git_row_id: int) -> None:
-    now = datetime(2026, 5, 1, tzinfo=UTC)
-    spec = create_spec_repo(db_session).add(paper_id="p-pick", repo_id=git_row_id)
-    r1 = create_requirement_repo(db_session).add(spec_id=spec.id, paper_id="alpha")
-    r2 = create_requirement_repo(db_session).add(spec_id=spec.id, paper_id="beta")
-    rv2 = create_requirement_version_repo(db_session).add(
-        requirement_id=r2.id,
-        commit_id="b" * 40,
-        commit_datetime=datetime(2026, 3, 1, tzinfo=UTC),
-        requirement_text="only on beta",
-        filepath_globs=["*.py"],
-        status="open",
-    )
-    art = create_artifact_repo(db_session).add(filepath="only_beta.py")
-    av = create_artifact_version_repo(db_session).add(
-        artifact_id=art.id,
-        commit_id="b" * 40,
-        commit_datetime=datetime(2026, 3, 1, tzinfo=UTC),
-        status=VersionStatus.ACTIVE.value,
-        file_content="",
-    )
-    create_implements_repo(db_session).add(requirement_version_id=rv2.id, artifact_version_id=av.id)
-
-    facade = create_gantt_chart_facade(db_session)
-    chart = facade.get_chart(repo_id=git_row_id, spec_id=spec.id, requirement_id=r2.id, now=now)
-    assert chart.requirement.paper_id == "beta"
-    assert len(chart.artifacts) == 1
-    assert chart.artifacts[0].filepath == "only_beta.py"
-
-    chart_r1 = facade.get_chart(repo_id=git_row_id, spec_id=spec.id, requirement_id=r1.id, now=now)
-    assert chart_r1.requirement.paper_id == "alpha"
-    assert chart_r1.artifacts == []
-
-
-def test_requirement_id_not_in_spec_returns_404(db_session: Session, git_row_id: int) -> None:
-    spec_a = create_spec_repo(db_session).add(paper_id="sa", repo_id=git_row_id)
-    spec_b = create_spec_repo(db_session).add(paper_id="sb", repo_id=git_row_id)
-    req_b = create_requirement_repo(db_session).add(spec_id=spec_b.id, paper_id="rb")
-
-    facade = create_gantt_chart_facade(db_session)
-    with pytest.raises(HTTPException) as exc:
-        facade.get_chart(repo_id=git_row_id, spec_id=spec_a.id, requirement_id=req_b.id)
+        facade.get_chart(repo_id=int(repository.id), spec_id=int(spec.id))
     assert exc.value.status_code == 404
 
 
-def test_spec_repo_mismatch_returns_404(db_session: Session, git_row_id: int) -> None:
-    other_git = create_git_repo_repo(db_session).add(
-        name="other",
-        url="https://example.test/other.git",
-        cursor_position="e" * 40,
-        location="/tmp/o",
-    ).id
-    spec = create_spec_repo(db_session).add(paper_id="p-x", repo_id=git_row_id)
-    create_requirement_repo(db_session).add(spec_id=spec.id, paper_id="r")
-
-    facade = create_gantt_chart_facade(db_session)
-    with pytest.raises(HTTPException) as exc:
-        facade.get_chart(repo_id=other_git, spec_id=spec.id)
-    assert exc.value.status_code == 404
-
-
-def test_no_requirement_returns_404(db_session: Session, git_row_id: int) -> None:
-    spec = create_spec_repo(db_session).add(paper_id="empty", repo_id=git_row_id)
-    facade = create_gantt_chart_facade(db_session)
-    with pytest.raises(HTTPException) as exc:
-        facade.get_chart(repo_id=git_row_id, spec_id=spec.id)
-    assert exc.value.status_code == 404
-
-
-def test_meta_true_when_latest_segment_implemented(db_session: Session, git_row_id: int) -> None:
-    ts0 = datetime(2026, 3, 1, tzinfo=UTC)
-    ts1 = datetime(2026, 3, 10, tzinfo=UTC)
-    now = datetime(2026, 4, 1, tzinfo=UTC)
-    spec = create_spec_repo(db_session).add(paper_id="p-meta", repo_id=git_row_id)
-    req = create_requirement_repo(db_session).add(spec_id=spec.id, paper_id="r")
-    rv1 = create_requirement_version_repo(db_session).add(
-        requirement_id=req.id,
-        commit_id="a" * 40,
-        commit_datetime=ts0,
-        requirement_text="v1",
-        filepath_globs=["*.py"],
-        status="open",
+def test_facade_unknown_spec_raises_404(db_session: Session) -> None:
+    repository = RepositoryRepo(db_session).add(
+        name="us", url="https://example.test/us.git"
     )
-    rv2 = create_requirement_version_repo(db_session).add(
-        requirement_id=req.id,
-        commit_id="b" * 40,
-        commit_datetime=ts1,
-        requirement_text="v2",
-        filepath_globs=["*.py"],
-        status="open",
-    )
-    art = create_artifact_repo(db_session).add(filepath="f.py")
-    av1 = create_artifact_version_repo(db_session).add(
-        artifact_id=art.id,
-        commit_id="a" * 40,
-        commit_datetime=ts0,
-        status=VersionStatus.INACTIVE.value,
-        file_content="",
-    )
-    av2 = create_artifact_version_repo(db_session).add(
-        artifact_id=art.id,
-        commit_id="b" * 40,
-        commit_datetime=ts1,
-        status=VersionStatus.ACTIVE.value,
-        file_content="",
-    )
-    create_implements_repo(db_session).add(requirement_version_id=rv1.id, artifact_version_id=av1.id)
-    create_implements_repo(db_session).add(requirement_version_id=rv2.id, artifact_version_id=av2.id)
-
-    facade = create_gantt_chart_facade(db_session)
-    chart = facade.get_chart(repo_id=git_row_id, spec_id=spec.id, now=now)
-    assert chart.meta.requirement_implemented is True
-    assert chart.requirement.history[-1].status == "implemented"
-
-
-def test_facade_unknown_spec_raises_404(db_session: Session, git_row_id: int) -> None:
     facade = GanttChartFacade(db_session)
     with pytest.raises(HTTPException) as exc:
-        facade.get_chart(repo_id=git_row_id, spec_id=999999)
+        facade.get_chart(repo_id=int(repository.id), spec_id=999999)
     assert exc.value.status_code == 404

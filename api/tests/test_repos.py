@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 from specvsreality_api.main import create_app
 from specvsreality_api.routes import health, repos
 from specvsreality_repositories.models import Base
-from specvsreality_repositories.models.git_repo import GitRepo
+from specvsreality_repositories.models.repository import Repository
 
 
 class CapturePublisher:
@@ -27,13 +27,15 @@ class CapturePublisher:
 
 
 @pytest.fixture
-def repos_app(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[FastAPI, CapturePublisher, Engine]:
+def repos_app(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> tuple[FastAPI, CapturePublisher, Engine]:
     db_path = tmp_path / "api-test.db"
     db_url = f"sqlite:///{db_path}"
     monkeypatch.setenv("DATABASE_URL", db_url)
 
     engine = create_engine(db_url, future=True)
-    Base.metadata.create_all(engine, tables=[GitRepo.__table__])
+    Base.metadata.create_all(engine, tables=[Repository.__table__])
 
     app = create_app()
     cap = CapturePublisher()
@@ -62,8 +64,9 @@ def test_create_and_list_repos(repos_app: tuple[FastAPI, CapturePublisher, Engin
         payload = create.json()
         assert payload["queued"] is True
         assert payload["repo"]["name"] == "repo-a"
-        assert payload["repo"]["location"] == ""
-        assert payload["repo"]["cursor_position"] == ""
+        assert payload["repo"]["clone_location"] is None
+        assert payload["repo"]["cursor_position"] is None
+        assert payload["repo"]["default_branch"] == "main"
 
         listing = client.get("/repos")
         assert listing.status_code == 200

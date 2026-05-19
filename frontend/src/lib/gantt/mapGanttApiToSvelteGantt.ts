@@ -16,6 +16,11 @@
  * source of truth: package README + `types/gantt.d.ts`.
  */
 import type { GanttChartResponse, GanttHistorySegment } from '$lib/api/repoCatalog';
+import {
+	buildArtifactSegmentTooltip,
+	buildRequirementSegmentTooltip,
+	type GanttSegmentTooltip
+} from '$lib/gantt/ganttSegmentTooltip';
 
 /** Mirrors svelte-gantt `RowModel`. */
 export type GanttRowModel = {
@@ -25,7 +30,7 @@ export type GanttRowModel = {
 	resizable?: boolean;
 };
 
-/** Mirrors svelte-gantt `TaskModel`. */
+/** Mirrors svelte-gantt `TaskModel` with segment tooltip metadata for hover UI. */
 export type GanttTaskModel = {
 	id: PropertyKey;
 	resourceId: PropertyKey;
@@ -35,6 +40,7 @@ export type GanttTaskModel = {
 	classes?: string;
 	draggable?: boolean;
 	resizable?: boolean;
+	tooltip?: GanttSegmentTooltip;
 };
 
 /** Mirrors svelte-gantt `TimeRangeModel` (`timeRanges` option). */
@@ -136,7 +142,8 @@ function mapRequirementSegments(block: GanttChartResponse['requirement']): Gantt
 			to: Number.isFinite(safeTo) ? safeTo : Date.now() + 60000,
 			classes: statusTaskClasses(seg.status),
 			draggable: false,
-			resizable: false
+			resizable: false,
+			tooltip: buildRequirementSegmentTooltip(block, seg)
 		};
 	});
 }
@@ -157,7 +164,8 @@ function mapArtifactSegments(
 			to: Number.isFinite(safeTo) ? safeTo : Date.now() + 60000,
 			classes: statusTaskClasses(seg.status),
 			draggable: false,
-			resizable: false
+			resizable: false,
+			tooltip: buildArtifactSegmentTooltip(block, seg)
 		};
 	});
 }

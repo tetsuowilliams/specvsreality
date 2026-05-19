@@ -54,6 +54,8 @@ export type GanttHistorySegment = {
 	end: string;
 	status: string;
 	commit: string | null;
+	requirement_text: string | null;
+	blob_sha: string | null;
 };
 
 export type GanttRequirementBlock = {

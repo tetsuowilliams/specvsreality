@@ -18,7 +18,6 @@ from specvsreality_api.schemas.gantt import (
 )
 from specvsreality_api.schemas.requirement_latest_version import RequirementLatestVersionResponse
 
-
 _STUB_TS = datetime(2026, 1, 1, tzinfo=UTC)
 
 
