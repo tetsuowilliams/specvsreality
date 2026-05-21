@@ -5,6 +5,9 @@ from specvsreality_api.schemas.repo_catalog.catalog_spec_item import CatalogSpec
 from specvsreality_api.schemas.repo_catalog.repo_catalog_response import RepoCatalogResponse
 from specvsreality_api.schemas.repo_catalog.spec_detail_response import SpecDetailResponse
 from specvsreality_api.schemas.repo_catalog.spec_detail_version_item import SpecDetailVersionItem
+from specvsreality_api.schemas.repo_catalog.spec_requirement_status_item import (
+    SpecRequirementStatusItem,
+)
 
 __all__ = [
     "CatalogRequirementItem",
@@ -12,4 +15,5 @@ __all__ = [
     "RepoCatalogResponse",
     "SpecDetailResponse",
     "SpecDetailVersionItem",
+    "SpecRequirementStatusItem",
 ]

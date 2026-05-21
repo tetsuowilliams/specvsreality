@@ -14,10 +14,12 @@ from specvsreality_api.schemas.repo_catalog import (
     RepoCatalogResponse,
     SpecDetailResponse,
     SpecDetailVersionItem,
+    SpecRequirementStatusItem,
 )
 from specvsreality_repositories.repos import (
     create_git_repo_repo,
     create_requirement_repo,
+    create_requirement_version_repo,
     create_spec_repo,
     create_spec_version_repo,
 )
@@ -58,6 +60,20 @@ async def get_repo_spec_detail(
         raise HTTPException(status_code=404, detail="spec not found")
 
     versions = create_spec_version_repo(session).list_for_spec_ordered(spec_id=spec_id)
+    requirements = create_requirement_repo(session).list_for_spec(spec_id=spec_id)
+    latest_by_req = {
+        rv.requirement_id: rv
+        for rv in create_requirement_version_repo(session).list_latest(spec_id=spec_id)
+    }
+    requirement_status = [
+        SpecRequirementStatusItem(
+            id=r.id,
+            paper_id=r.paper_id,
+            has_version=r.id in latest_by_req,
+            implemented=latest_by_req[r.id].implemented if r.id in latest_by_req else None,
+        )
+        for r in requirements
+    ]
     return SpecDetailResponse(
         id=spec.id,
         paper_id=spec.paper_id,
@@ -70,4 +86,5 @@ async def get_repo_spec_detail(
             )
             for v in versions
         ],
+        requirements=requirement_status,
     )

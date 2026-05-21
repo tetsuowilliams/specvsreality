@@ -1,4 +1,4 @@
-"""Unit tests for `ArtifactMerge` (deps mocked)."""
+"""Unit tests for `ArtifactMerge.merge_artifacts`."""
 
 from __future__ import annotations
 
@@ -9,8 +9,9 @@ from unittest.mock import MagicMock
 import pytest
 
 from specvsreality_repositories.repos.enums import VersionStatus
-from specvsreality_worker.agents.implements_agent.models import ImplementsAssessment
 from specvsreality_worker.core import ArtifactMerge, CommitContext
+from specvsreality_worker.core.spec_detection import ArtifactType, SpecDetection
+from specvsreality_worker.git_adapter import ChangedPath, GitCommitPathInformation, PathChangeState
 
 
 @pytest.fixture
@@ -33,249 +34,130 @@ def artifact_merge() -> ArtifactMerge:
         requirement_version_repo=MagicMock(),
         implements_repo=MagicMock(),
         implements_evaluation_agent=MagicMock(),
+        spec_detection=SpecDetection(),
     )
 
 
-def _assessment(*, implements: bool) -> ImplementsAssessment:
-    return ImplementsAssessment(
-        implements=implements,
-        confidence="high" if implements else "low",
-        reasoning="test",
-        gaps=[] if implements else ["gap"],
-    )
+def _code_change(path: str, state: PathChangeState) -> ChangedPath:
+    return ChangedPath(path=path, state=state, artifact_type=ArtifactType.CODE)
 
 
-def test_merge_new_updated_returns_pair_when_glob_matches(
+def _spec_change(path: str, state: PathChangeState = PathChangeState.MODIFIED) -> ChangedPath:
+    return ChangedPath(path=path, state=state, artifact_type=ArtifactType.SPEC)
+
+
+def test_merge_artifacts_skips_spec_paths(
     artifact_merge: ArtifactMerge,
     commit: CommitContext,
 ) -> None:
-    rv = SimpleNamespace(id=7, filepath_globs=["src/**/*.py"])
-    artifact_merge._requirement_version_repo.list_latest.return_value = [rv]
-    artifact_merge._tree_scan.is_glob_match.return_value = True
-
-    pairs = artifact_merge.merge_new_updated_artifact(relpath="src/mod.py", commit=commit)
-
-    assert pairs == [(7, "src/mod.py")]
-    artifact_merge._tree_scan.is_glob_match.assert_called()
-
-
-def test_merge_new_updated_returns_empty_when_no_glob_matches(
-    artifact_merge: ArtifactMerge,
-    commit: CommitContext,
-) -> None:
-    rv = SimpleNamespace(id=7, filepath_globs=["other/**"])
-    artifact_merge._requirement_version_repo.list_latest.return_value = [rv]
-    artifact_merge._tree_scan.is_glob_match.return_value = False
-
-    pairs = artifact_merge.merge_new_updated_artifact(relpath="src/mod.py", commit=commit)
-
-    assert pairs == []
-
-
-def test_merge_new_updated_returns_multiple_rvs_when_each_matches_same_relpath(
-    artifact_merge: ArtifactMerge,
-    commit: CommitContext,
-) -> None:
-    rv1 = SimpleNamespace(id=10, filepath_globs=["src/*.py"])
-    rv2 = SimpleNamespace(id=20, filepath_globs=["*.py"])
-    artifact_merge._requirement_version_repo.list_latest.return_value = [rv1, rv2]
-    artifact_merge._tree_scan.is_glob_match.return_value = True
-    relpath = "src/x.py"
-
-    pairs = artifact_merge.merge_new_updated_artifact(relpath=relpath, commit=commit)
-
-    assert set(pairs) == {(10, relpath), (20, relpath)}
-
-
-def test_merge_deleted_does_not_add_version_without_prior_artifact_version(
-    artifact_merge: ArtifactMerge,
-    commit: CommitContext,
-) -> None:
-    artifact_merge._artifact_version_repo.get_latest_for_artifact_filepath.return_value = None
-
-    artifact_merge.merge_deleted_artifact(relpath="gone.py", commit=commit)
-
-    artifact_merge._artifact_version_repo.add.assert_not_called()
-
-
-def test_merge_deleted_adds_deleted_version_when_prior_version_exists(
-    artifact_merge: ArtifactMerge,
-    commit: CommitContext,
-) -> None:
-    prior = SimpleNamespace(artifact_id=3)
-    artifact_merge._artifact_version_repo.get_latest_for_artifact_filepath.return_value = prior
-
-    artifact_merge.merge_deleted_artifact(relpath="tracked.py", commit=commit)
-
-    artifact_merge._artifact_version_repo.add.assert_called_once()
-    call = artifact_merge._artifact_version_repo.add.call_args
-    assert call.kwargs["artifact_id"] == 3
-    assert call.kwargs["status"] == VersionStatus.DELETED.value
-
-
-def test_evaluate_creates_artifact_and_active_version_and_implements_when_new(
-    artifact_merge: ArtifactMerge,
-    commit: CommitContext,
-) -> None:
-    rv = SimpleNamespace(requirement_text="Must do X")
-    artifact_merge._requirement_version_repo.get_by_id.return_value = rv
-    artifact_merge._git_adapter.file_at_commit.return_value = "code"
-    artifact_merge._implements_evaluation_agent.evaluate.return_value = _assessment(implements=True)
-
-    artifact_merge._artifact_repo.get_by_filepath.return_value = None
-    new_artifact = SimpleNamespace(id=100)
-    artifact_merge._artifact_repo.add.return_value = new_artifact
-    artifact_merge._artifact_version_repo.get_latest_for_artifact_filepath.return_value = None
-    artifact_merge._artifact_version_repo.get_by_filepath_and_commit.return_value = None
-    new_av = SimpleNamespace(id=200)
-    artifact_merge._artifact_version_repo.add.return_value = new_av
-
-    artifact_merge.evaluate_and_merge_implementations(
-        implementation_pairs=[(5, "lib/a.py")],
-        commit=commit,
-    )
-
-    artifact_merge._artifact_repo.add.assert_called_once_with(filepath="lib/a.py")
-    artifact_merge._artifact_version_repo.add.assert_called_once()
-    av_call = artifact_merge._artifact_version_repo.add.call_args
-    assert av_call.kwargs["artifact_id"] == 100
-    assert av_call.kwargs["status"] == VersionStatus.ACTIVE.value
-    assert av_call.kwargs["file_content"] == "code"
-
-    artifact_merge._implements_repo.add.assert_called_once_with(
-        requirement_version_id=5,
-        artifact_version_id=200,
-    )
-
-
-def test_evaluate_uses_updated_status_and_links_new_version_when_prior_av_exists(
-    artifact_merge: ArtifactMerge,
-    commit: CommitContext,
-) -> None:
-    rv = SimpleNamespace(requirement_text="req")
-    artifact_merge._requirement_version_repo.get_by_id.return_value = rv
-    artifact_merge._git_adapter.file_at_commit.return_value = "v2"
-    artifact_merge._implements_evaluation_agent.evaluate.return_value = _assessment(implements=True)
-
-    existing_art = SimpleNamespace(id=40)
-    artifact_merge._artifact_repo.get_by_filepath.return_value = existing_art
-    prior_av = SimpleNamespace(id=77)
-    artifact_merge._artifact_version_repo.get_latest_for_artifact_filepath.return_value = prior_av
-    artifact_merge._artifact_version_repo.get_by_filepath_and_commit.return_value = None
-    new_av = SimpleNamespace(id=88)
-    artifact_merge._artifact_version_repo.add.return_value = new_av
-
-    artifact_merge.evaluate_and_merge_implementations(
-        implementation_pairs=[(1, "lib/a.py")],
+    artifact_merge.merge_artifacts(
+        changes=GitCommitPathInformation(
+            paths=[_spec_change("specs/x/spec.md", PathChangeState.NEW)]
+        ),
         commit=commit,
     )
 
     artifact_merge._artifact_repo.add.assert_not_called()
-    artifact_merge._artifact_version_repo.add.assert_called_once()
-    assert artifact_merge._artifact_version_repo.add.call_args.kwargs["status"] == VersionStatus.UPDATED.value
-    artifact_merge._implements_repo.add.assert_called_once_with(
-        requirement_version_id=1,
-        artifact_version_id=88,
-    )
-
-
-def test_evaluate_does_nothing_when_not_implements_and_no_artifact_version(
-    artifact_merge: ArtifactMerge,
-    commit: CommitContext,
-) -> None:
-    rv = SimpleNamespace(requirement_text="req")
-    artifact_merge._requirement_version_repo.get_by_id.return_value = rv
-    artifact_merge._git_adapter.file_at_commit.return_value = "x"
-    artifact_merge._implements_evaluation_agent.evaluate.return_value = _assessment(implements=False)
-    artifact_merge._artifact_version_repo.get_latest_for_artifact_filepath.return_value = None
-    artifact_merge._artifact_version_repo.get_by_filepath_and_commit.return_value = None
-
-    artifact_merge.evaluate_and_merge_implementations(
-        implementation_pairs=[(9, "orphan.py")],
-        commit=commit,
-    )
-
     artifact_merge._artifact_version_repo.add.assert_not_called()
-    artifact_merge._implements_repo.add.assert_not_called()
 
 
-def test_evaluate_adds_updated_empty_version_when_not_implements_but_artifact_tracked(
+def test_merge_artifacts_creates_active_version_for_new_code_file(
     artifact_merge: ArtifactMerge,
     commit: CommitContext,
 ) -> None:
-    rv = SimpleNamespace(requirement_text="req")
-    artifact_merge._requirement_version_repo.get_by_id.return_value = rv
-    artifact_merge._git_adapter.file_at_commit.return_value = "x"
-    artifact_merge._implements_evaluation_agent.evaluate.return_value = _assessment(implements=False)
-    tracked = SimpleNamespace(artifact_id=50, id=999, commit_id=commit.commit_sha)
-    artifact_merge._artifact_version_repo.get_latest_for_artifact_filepath.return_value = tracked
-    artifact_merge._artifact_version_repo.get_by_filepath_and_commit.return_value = None
-    artifact_merge._implements_repo.get_by_requirement_version_and_artifact_version.return_value = SimpleNamespace()
-    artifact_merge._artifact_repo.get_by_filepath.return_value = SimpleNamespace(id=50)
+    artifact_merge._artifact_repo.get_by_filepath.return_value = None
+    artifact_merge._artifact_repo.add.return_value = SimpleNamespace(id=100)
+    artifact_merge._git_adapter.file_at_commit.return_value = "print('hi')\n"
 
-    artifact_merge.evaluate_and_merge_implementations(
-        implementation_pairs=[(9, "tracked.py")],
+    artifact_merge.merge_artifacts(
+        changes=GitCommitPathInformation(
+            paths=[_code_change("src/main.py", PathChangeState.NEW)]
+        ),
         commit=commit,
     )
 
-    artifact_merge._artifact_version_repo.add.assert_called_once()
-    call = artifact_merge._artifact_version_repo.add.call_args
-    assert call.kwargs["artifact_id"] == 50
-    assert call.kwargs["status"] == VersionStatus.UPDATED.value
-    assert call.kwargs["file_content"] == ""
-    artifact_merge._implements_repo.add.assert_not_called()
+    artifact_merge._artifact_repo.add.assert_called_once_with(filepath="src/main.py")
+    artifact_merge._git_adapter.file_at_commit.assert_called_once_with(
+        commit.commit_sha,
+        "src/main.py",
+    )
+    artifact_merge._artifact_version_repo.add.assert_called_once_with(
+        artifact_id=100,
+        commit_sha=commit.commit_sha,
+        commit_datetime=commit.commit_datetime,
+        status=VersionStatus.ACTIVE.value,
+        file_content="print('hi')\n",
+    )
 
 
-def test_evaluate_dedupes_artifact_version_per_path_per_commit_when_multiple_rvs_implement(
+def test_merge_artifacts_reuses_artifact_and_marks_modified_as_updated(
     artifact_merge: ArtifactMerge,
     commit: CommitContext,
 ) -> None:
-    """Regression: today we insert one AV per (rv, path) pair; we want one snapshot per (path, commit)."""
-    rv = SimpleNamespace(requirement_text="req")
-    artifact_merge._requirement_version_repo.get_by_id.return_value = rv
-    artifact_merge._git_adapter.file_at_commit.return_value = "same snapshot"
-    artifact_merge._implements_evaluation_agent.evaluate.return_value = _assessment(implements=True)
+    existing = SimpleNamespace(id=40)
+    artifact_merge._artifact_repo.get_by_filepath.return_value = existing
+    artifact_merge._git_adapter.file_at_commit.return_value = "v2"
 
-    existing_art = SimpleNamespace(id=40)
-    artifact_merge._artifact_repo.get_by_filepath.return_value = existing_art
-    artifact_merge._artifact_version_repo.get_latest_for_artifact_filepath.return_value = None
-    first_av = SimpleNamespace(id=301)
-    artifact_merge._artifact_version_repo.get_by_filepath_and_commit.side_effect = [None, first_av]
-    artifact_merge._artifact_version_repo.add.return_value = first_av
-
-    artifact_merge.evaluate_and_merge_implementations(
-        implementation_pairs=[(1, "lib/a.py"), (2, "lib/a.py")],
+    artifact_merge.merge_artifacts(
+        changes=GitCommitPathInformation(
+            paths=[_code_change("lib/a.py", PathChangeState.MODIFIED)]
+        ),
         commit=commit,
     )
 
-    artifact_merge._artifact_version_repo.add.assert_called_once()
-    impl_calls = artifact_merge._implements_repo.add.call_args_list
-    assert len(impl_calls) == 2
-    assert impl_calls[0].kwargs["artifact_version_id"] == impl_calls[1].kwargs["artifact_version_id"]
+    artifact_merge._artifact_repo.add.assert_not_called()
+    artifact_merge._artifact_version_repo.add.assert_called_once_with(
+        artifact_id=40,
+        commit_sha=commit.commit_sha,
+        commit_datetime=commit.commit_datetime,
+        status=VersionStatus.UPDATED.value,
+        file_content="v2",
+    )
 
 
-def test_evaluate_dedupes_empty_marker_per_path_per_commit_when_multiple_rvs_reject_tracked_file(
+def test_merge_artifacts_records_deleted_code_with_empty_content(
     artifact_merge: ArtifactMerge,
     commit: CommitContext,
 ) -> None:
-    """Else-branch: one empty UPDATED row per (path, commit) when multiple RVs reject."""
-    rv = SimpleNamespace(requirement_text="req")
-    artifact_merge._requirement_version_repo.get_by_id.return_value = rv
-    artifact_merge._git_adapter.file_at_commit.return_value = "x"
-    artifact_merge._implements_evaluation_agent.evaluate.return_value = _assessment(implements=False)
-    tracked = SimpleNamespace(artifact_id=50, id=888, commit_id=commit.commit_sha)
-    artifact_merge._artifact_version_repo.get_latest_for_artifact_filepath.return_value = tracked
-    artifact_merge._artifact_version_repo.get_by_filepath_and_commit.side_effect = [
-        None,
-        SimpleNamespace(commit_id=commit.commit_sha),
+    existing = SimpleNamespace(id=50)
+    artifact_merge._artifact_repo.get_by_filepath.return_value = existing
+
+    artifact_merge.merge_artifacts(
+        changes=GitCommitPathInformation(
+            paths=[_code_change("gone.py", PathChangeState.DELETED)]
+        ),
+        commit=commit,
+    )
+
+    artifact_merge._git_adapter.file_at_commit.assert_not_called()
+    artifact_merge._artifact_version_repo.add.assert_called_once_with(
+        artifact_id=50,
+        commit_sha=commit.commit_sha,
+        commit_datetime=commit.commit_datetime,
+        status=VersionStatus.DELETED.value,
+        file_content="",
+    )
+
+
+def test_merge_artifacts_records_every_changed_code_path(
+    artifact_merge: ArtifactMerge,
+    commit: CommitContext,
+) -> None:
+    artifact_merge._artifact_repo.get_by_filepath.return_value = None
+    artifact_merge._artifact_repo.add.side_effect = [
+        SimpleNamespace(id=1),
+        SimpleNamespace(id=2),
     ]
-    artifact_merge._implements_repo.get_by_requirement_version_and_artifact_version.return_value = SimpleNamespace()
-    artifact_merge._artifact_repo.get_by_filepath.return_value = SimpleNamespace(id=50)
+    artifact_merge._git_adapter.file_at_commit.side_effect = ["a", "b"]
 
-    artifact_merge.evaluate_and_merge_implementations(
-        implementation_pairs=[(1, "lib/a.py"), (2, "lib/a.py")],
+    artifact_merge.merge_artifacts(
+        changes=GitCommitPathInformation(
+            paths=[
+                _code_change("a.py", PathChangeState.NEW),
+                _code_change("b.py", PathChangeState.NEW),
+            ]
+        ),
         commit=commit,
     )
 
-    assert artifact_merge._artifact_version_repo.add.call_count == 1
-    artifact_merge._implements_repo.add.assert_not_called()
+    assert artifact_merge._artifact_version_repo.add.call_count == 2

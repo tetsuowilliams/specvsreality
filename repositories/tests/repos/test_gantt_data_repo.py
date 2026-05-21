@@ -44,7 +44,7 @@ def test_list_requirement_versions_ordered(db_session: Session, git_row_id: int)
     ts = datetime.now(UTC)
     v2 = create_requirement_version_repo(db_session).add(
         requirement_id=req.id,
-        commit_id="b" * 40,
+        commit_sha="b" * 40,
         commit_datetime=ts + timedelta(hours=1),
         requirement_text="t2",
         filepath_globs=["*.py"],
@@ -52,7 +52,7 @@ def test_list_requirement_versions_ordered(db_session: Session, git_row_id: int)
     )
     v1 = create_requirement_version_repo(db_session).add(
         requirement_id=req.id,
-        commit_id="a" * 40,
+        commit_sha="a" * 40,
         commit_datetime=ts,
         requirement_text="t1",
         filepath_globs=["*.py"],
@@ -69,7 +69,7 @@ def test_list_implements_with_artifact_versions(db_session: Session, git_row_id:
     ts = datetime.now(UTC)
     rv = create_requirement_version_repo(db_session).add(
         requirement_id=req.id,
-        commit_id="a" * 40,
+        commit_sha="a" * 40,
         commit_datetime=ts,
         requirement_text="t",
         filepath_globs=["*.py"],
@@ -78,7 +78,7 @@ def test_list_implements_with_artifact_versions(db_session: Session, git_row_id:
     art = create_artifact_repo(db_session).add(filepath="src/x.py")
     av = create_artifact_version_repo(db_session).add(
         artifact_id=art.id,
-        commit_id="a" * 40,
+        commit_sha="a" * 40,
         commit_datetime=ts,
         status="active",
         file_content="x",
@@ -110,21 +110,21 @@ def test_list_artifact_versions_for_artifact_ids_ordered(db_session: Session, gi
     ts = datetime.now(UTC)
     av_b1 = create_artifact_version_repo(db_session).add(
         artifact_id=art_b.id,
-        commit_id="1" * 40,
+        commit_sha="1" * 40,
         commit_datetime=ts,
         status="active",
         file_content="",
     )
     av_a1 = create_artifact_version_repo(db_session).add(
         artifact_id=art_a.id,
-        commit_id="2" * 40,
+        commit_sha="2" * 40,
         commit_datetime=ts,
         status="active",
         file_content="",
     )
     av_a2 = create_artifact_version_repo(db_session).add(
         artifact_id=art_a.id,
-        commit_id="3" * 40,
+        commit_sha="3" * 40,
         commit_datetime=ts + timedelta(seconds=1),
         status="deleted",
         file_content="",

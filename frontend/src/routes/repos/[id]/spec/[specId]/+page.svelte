@@ -1,4 +1,5 @@
 <script lang="ts">
+	import SpecRequirementsList from '$lib/components/SpecRequirementsList.svelte';
 	import { fetchSpecDetail, type SpecDetailResponse } from '$lib/api/repoCatalog';
 
 	let { data }: { data: { id: string; specId: string } } = $props();
@@ -31,8 +32,17 @@
 	<p class="error">{err}</p>
 {:else if detail}
 	<section class="spec-detail">
-		<h2>Spec</h2>
-		<p class="paper"><span class="label">Paper id</span> <strong>{detail.paper_id}</strong></p>
+		<header class="spec-header">
+			<div>
+				<h2>Spec</h2>
+				<p class="paper"><span class="label">Paper id</span> <strong>{detail.paper_id}</strong></p>
+			</div>
+		</header>
+		<SpecRequirementsList
+			repoId={data.id}
+			specId={data.specId}
+			requirements={detail.requirements ?? []}
+		/>
 		<h3>Versions</h3>
 		{#if detail.versions.length === 0}
 			<p class="muted">No spec versions yet.</p>
@@ -57,18 +67,25 @@
 {/if}
 
 <style>
+	.spec-header {
+		margin-bottom: 0.25rem;
+	}
 	.spec-detail h2 {
-		margin: 0 0 0.5rem 0;
-		font-size: 1.2rem;
+		margin: 0 0 0.35rem 0;
+		font-size: 1.35rem;
+		font-weight: 700;
+		letter-spacing: -0.02em;
+		color: #0f172a;
 	}
 	.spec-detail h3 {
-		margin: 1rem 0 0.4rem 0;
-		font-size: 1rem;
+		margin: 1.25rem 0 0.5rem 0;
+		font-size: 0.95rem;
+		font-weight: 600;
 		color: #334155;
 	}
 	.paper {
-		margin: 0.25rem 0 0.75rem 0;
-		font-size: 0.95rem;
+		margin: 0;
+		font-size: 0.88rem;
 	}
 	.label {
 		color: #64748b;

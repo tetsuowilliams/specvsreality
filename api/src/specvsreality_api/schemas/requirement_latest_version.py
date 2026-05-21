@@ -10,5 +10,5 @@ from pydantic import BaseModel, Field
 class RequirementLatestVersionResponse(BaseModel):
     paper_id: str = Field(description="Requirement paper id under the spec.")
     requirement_text: str = Field(description="Text body from the latest requirement_version row.")
-    commit_id: str
+    commit_sha: str
     commit_datetime: datetime

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
+
 import pytest
 from sqlalchemy.orm import Session
 
@@ -11,6 +13,10 @@ from specvsreality_repositories.repos import (
     create_spec_repo,
     create_spec_version_repo,
 )
+from specvsreality_repositories.repos.enums import VersionStatus
+
+_COMMIT_SHA = "a" * 40
+_COMMIT_DT = datetime(2026, 1, 1, tzinfo=UTC)
 
 
 @pytest.fixture()
@@ -43,8 +49,26 @@ def test_requirement_list_for_spec(db_session: Session, git_row_id: int) -> None
 def test_spec_version_list_for_spec_ordered(db_session: Session, git_row_id: int) -> None:
     spec = create_spec_repo(db_session).add(paper_id="p", repo_id=git_row_id)
     sv_repo = create_spec_version_repo(db_session)
-    v1 = sv_repo.add(spec_id=spec.id, spec_md="s1", tasks_md="t1", plan_md="p1")
-    v2 = sv_repo.add(spec_id=spec.id, spec_md="s2", tasks_md="t2", plan_md="p2")
+    v1 = sv_repo.add(
+        spec_id=spec.id,
+        spec_md="s1",
+        tasks_md="t1",
+        plan_md="p1",
+        commit_sha=_COMMIT_SHA,
+        created_at=_COMMIT_DT,
+        committed_at=_COMMIT_DT,
+        status=VersionStatus.ACTIVE,
+    )
+    v2 = sv_repo.add(
+        spec_id=spec.id,
+        spec_md="s2",
+        tasks_md="t2",
+        plan_md="p2",
+        commit_sha=_COMMIT_SHA,
+        created_at=_COMMIT_DT,
+        committed_at=_COMMIT_DT,
+        status=VersionStatus.ACTIVE,
+    )
     rows = sv_repo.list_for_spec_ordered(spec_id=spec.id)
     assert [r.id for r in rows] == [v1.id, v2.id]
     assert rows[0].spec_md == "s1"

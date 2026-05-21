@@ -38,6 +38,21 @@ class WorkerSettings(BaseSettings):
     virtual_host: str = Field(default="/", description="AMQP vhost")
     queue_name: str = Field(default="messages", description="Queue to consume")
     prefetch_count: int = Field(default=1, ge=1, description="Consumer prefetch (QoS)")
+    heartbeat: int = Field(
+        default=1800,
+        ge=0,
+        description="AMQP heartbeat interval in seconds (0 = propose disabled; broker may still require one)",
+    )
+    blocked_connection_timeout: int = Field(
+        default=0,
+        ge=0,
+        description="Seconds before a broker-blocked connection is closed (0 = disabled)",
+    )
+    reconnect_delay_seconds: float = Field(
+        default=5.0,
+        ge=0,
+        description="Pause before reconnecting after the AMQP connection is lost",
+    )
     username: str = Field(default="guest", description="AMQP username")
     password: str = Field(default="", description="AMQP password (prefer env in production)")
 

@@ -4,10 +4,14 @@ from specvsreality_worker.agents.implements_agent.agent import (
     ImplementsEvaluationAgent,
     create_implements_evaluation_agent,
 )
-from specvsreality_worker.agents.implements_agent.models import ImplementsAssessment
+from specvsreality_worker.agents.implements_agent.models import (
+    CodeEvidence,
+    RequirementJustification,
+)
 
 __all__ = [
-    "ImplementsAssessment",
+    "CodeEvidence",
     "ImplementsEvaluationAgent",
+    "RequirementJustification",
     "create_implements_evaluation_agent",
 ]

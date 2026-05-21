@@ -2,15 +2,41 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
+
 from sqlalchemy.orm import Session
 
 from specvsreality_repositories.repos import create_spec_repo, create_spec_version_repo
+from specvsreality_repositories.repos.enums import VersionStatus
+
+_COMMIT_SHA = "a" * 40
+_COMMIT_DT = datetime(2026, 1, 15, tzinfo=UTC)
+
+
+def _add_spec_version(
+    repo,
+    *,
+    spec_id: int,
+    spec_md: str = "# S",
+    tasks_md: str | None = "- T",
+    plan_md: str | None = "P",
+) :
+    return repo.add(
+        spec_id=spec_id,
+        spec_md=spec_md,
+        tasks_md=tasks_md,
+        plan_md=plan_md,
+        commit_sha=_COMMIT_SHA,
+        created_at=_COMMIT_DT,
+        committed_at=_COMMIT_DT,
+        status=VersionStatus.ACTIVE,
+    )
 
 
 def test_add_and_get_by_id(db_session: Session, git_repo_id: int) -> None:
     spec = create_spec_repo(db_session).add(paper_id="0001-sv", repo_id=git_repo_id)
     repo = create_spec_version_repo(db_session)
-    row = repo.add(spec_id=spec.id, spec_md="# S", tasks_md="- T", plan_md="P")
+    row = _add_spec_version(repo, spec_id=spec.id)
 
     loaded = repo.get_by_id(row.id)
     assert loaded is not None
@@ -18,6 +44,10 @@ def test_add_and_get_by_id(db_session: Session, git_repo_id: int) -> None:
     assert loaded.spec_md == "# S"
     assert loaded.tasks_md == "- T"
     assert loaded.plan_md == "P"
+    assert loaded.commit_sha == _COMMIT_SHA
+    assert loaded.created_at == _COMMIT_DT
+    assert loaded.committed_at == _COMMIT_DT
+    assert loaded.status == VersionStatus.ACTIVE.value
 
 
 def test_get_by_id_returns_none_when_missing(db_session: Session) -> None:
@@ -28,7 +58,7 @@ def test_get_by_id_returns_none_when_missing(db_session: Session) -> None:
 def test_add_accepts_null_tasks_and_plan(db_session: Session, git_repo_id: int) -> None:
     spec = create_spec_repo(db_session).add(paper_id="0002-null-sidecars", repo_id=git_repo_id)
     repo = create_spec_version_repo(db_session)
-    row = repo.add(spec_id=spec.id, spec_md="# S", tasks_md=None, plan_md=None)
+    row = _add_spec_version(repo, spec_id=spec.id, tasks_md=None, plan_md=None)
 
     loaded = repo.get_by_id(row.id)
     assert loaded is not None

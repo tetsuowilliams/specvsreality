@@ -40,11 +40,15 @@ def test_spec_graph_round_trip(db_session: Session, git_row_id: int) -> None:
         spec_md="# s",
         tasks_md="- t",
         plan_md="p",
+        commit_sha="c" * 40,
+        created_at=ts,
+        committed_at=ts,
+        status=VersionStatus.ACTIVE,
     )
     req = create_requirement_repo(db_session).add(spec_id=spec.id, paper_id=paper_id)
     rv = create_requirement_version_repo(db_session).add(
         requirement_id=req.id,
-        commit_id="c" * 40,
+        commit_sha="c" * 40,
         commit_datetime=ts,
         requirement_text="do thing",
         filepath_globs=["*.py"],
@@ -53,7 +57,7 @@ def test_spec_graph_round_trip(db_session: Session, git_row_id: int) -> None:
     art = create_artifact_repo(db_session).add(filepath="src/f.py")
     av = create_artifact_version_repo(db_session).add(
         artifact_id=art.id,
-        commit_id="c" * 40,
+        commit_sha="c" * 40,
         commit_datetime=ts,
         status="present",
         file_content="x = 1",
@@ -78,7 +82,7 @@ def test_requirement_repo_list_latest_active_for_spec(db_session: Session, git_r
     req_active = requirement_repo.add(spec_id=spec.id, paper_id="r-active")
     requirement_version_repo.add(
         requirement_id=req_active.id,
-        commit_id="a" * 40,
+        commit_sha="a" * 40,
         commit_datetime=ts,
         requirement_text="active requirement",
         filepath_globs=["*.py"],
@@ -88,7 +92,7 @@ def test_requirement_repo_list_latest_active_for_spec(db_session: Session, git_r
     req_inactive = requirement_repo.add(spec_id=spec.id, paper_id="r-inactive")
     requirement_version_repo.add(
         requirement_id=req_inactive.id,
-        commit_id="b" * 40,
+        commit_sha="b" * 40,
         commit_datetime=ts,
         requirement_text="was active",
         filepath_globs=["*.py"],
@@ -96,7 +100,7 @@ def test_requirement_repo_list_latest_active_for_spec(db_session: Session, git_r
     )
     requirement_version_repo.add(
         requirement_id=req_inactive.id,
-        commit_id="c" * 40,
+        commit_sha="c" * 40,
         commit_datetime=ts + timedelta(seconds=1),
         requirement_text="now inactive",
         filepath_globs=["*.py"],
@@ -107,7 +111,7 @@ def test_requirement_repo_list_latest_active_for_spec(db_session: Session, git_r
     req_other_spec = requirement_repo.add(spec_id=other_spec.id, paper_id="r-other")
     requirement_version_repo.add(
         requirement_id=req_other_spec.id,
-        commit_id="d" * 40,
+        commit_sha="d" * 40,
         commit_datetime=ts,
         requirement_text="active but other spec",
         filepath_globs=["*.py"],
@@ -129,7 +133,7 @@ def test_requirement_version_repo_list_latest_for_spec(db_session: Session, git_
     req_a = requirement_repo.add(spec_id=spec.id, paper_id="a")
     requirement_version_repo.add(
         requirement_id=req_a.id,
-        commit_id="a" * 40,
+        commit_sha="a" * 40,
         commit_datetime=ts,
         requirement_text="a v1",
         filepath_globs=["*.py"],
@@ -137,7 +141,7 @@ def test_requirement_version_repo_list_latest_for_spec(db_session: Session, git_
     )
     rv_a_latest = requirement_version_repo.add(
         requirement_id=req_a.id,
-        commit_id="b" * 40,
+        commit_sha="b" * 40,
         commit_datetime=ts + timedelta(seconds=10),
         requirement_text="a v2",
         filepath_globs=["src/**/*.py"],
@@ -147,7 +151,7 @@ def test_requirement_version_repo_list_latest_for_spec(db_session: Session, git_
     req_b = requirement_repo.add(spec_id=spec.id, paper_id="b")
     requirement_version_repo.add(
         requirement_id=req_b.id,
-        commit_id="c" * 40,
+        commit_sha="c" * 40,
         commit_datetime=ts,
         requirement_text="b v1",
         filepath_globs=[],
@@ -157,7 +161,7 @@ def test_requirement_version_repo_list_latest_for_spec(db_session: Session, git_
     req_other = requirement_repo.add(spec_id=other_spec.id, paper_id="other")
     requirement_version_repo.add(
         requirement_id=req_other.id,
-        commit_id="d" * 40,
+        commit_sha="d" * 40,
         commit_datetime=ts + timedelta(days=1),
         requirement_text="other only",
         filepath_globs=[],
@@ -188,7 +192,7 @@ def test_requirement_version_repo_get_for_artifact_filepath(db_session: Session,
     req_a = requirement_repo.add(spec_id=spec.id, paper_id="a")
     rv_a = requirement_version_repo.add(
         requirement_id=req_a.id,
-        commit_id="a" * 40,
+        commit_sha="a" * 40,
         commit_datetime=ts,
         requirement_text="req a",
         filepath_globs=[],
@@ -197,7 +201,7 @@ def test_requirement_version_repo_get_for_artifact_filepath(db_session: Session,
     req_b = requirement_repo.add(spec_id=spec.id, paper_id="b")
     rv_b = requirement_version_repo.add(
         requirement_id=req_b.id,
-        commit_id="b" * 40,
+        commit_sha="b" * 40,
         commit_datetime=ts,
         requirement_text="req b",
         filepath_globs=[],
@@ -207,7 +211,7 @@ def test_requirement_version_repo_get_for_artifact_filepath(db_session: Session,
     art = artifact_repo.add(filepath=target_path)
     av = artifact_version_repo.add(
         artifact_id=art.id,
-        commit_id="c" * 40,
+        commit_sha="c" * 40,
         commit_datetime=ts,
         status="present",
         file_content="x = 1",
@@ -223,7 +227,7 @@ def test_requirement_version_repo_get_for_artifact_filepath(db_session: Session,
     req_other = requirement_repo.add(spec_id=other_spec.id, paper_id="other")
     rv_other = requirement_version_repo.add(
         requirement_id=req_other.id,
-        commit_id="d" * 40,
+        commit_sha="d" * 40,
         commit_datetime=ts,
         requirement_text="other spec",
         filepath_globs=[],
@@ -232,7 +236,7 @@ def test_requirement_version_repo_get_for_artifact_filepath(db_session: Session,
     art_other = artifact_repo.add(filepath=target_path)
     av_other = artifact_version_repo.add(
         artifact_id=art_other.id,
-        commit_id="e" * 40,
+        commit_sha="e" * 40,
         commit_datetime=ts,
         status="present",
         file_content="y = 2",
@@ -259,14 +263,14 @@ def test_artifact_version_repo_get_latest_for_artifact_filepath(db_session: Sess
     art = artifact_repo.add(filepath=path)
     av_old = artifact_version_repo.add(
         artifact_id=art.id,
-        commit_id="a" * 40,
+        commit_sha="a" * 40,
         commit_datetime=ts,
         status="present",
         file_content="v1",
     )
     av_new = artifact_version_repo.add(
         artifact_id=art.id,
-        commit_id="b" * 40,
+        commit_sha="b" * 40,
         commit_datetime=ts + timedelta(seconds=30),
         status="present",
         file_content="v2",
@@ -282,7 +286,7 @@ def test_artifact_version_repo_get_latest_for_artifact_filepath(db_session: Sess
     art_dup = artifact_repo.add(filepath=path)
     av_dup_newer = artifact_version_repo.add(
         artifact_id=art_dup.id,
-        commit_id="c" * 40,
+        commit_sha="c" * 40,
         commit_datetime=ts + timedelta(minutes=1),
         status="present",
         file_content="dup newer",

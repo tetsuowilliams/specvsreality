@@ -32,13 +32,13 @@ def test_get_by_filepath_and_commit_returns_matching_row(db_session: Session, gi
     av_repo = create_artifact_version_repo(db_session)
     expected = av_repo.add(
         artifact_id=art.id,
-        commit_id=commit,
+        commit_sha=commit,
         commit_datetime=ts,
         status="active",
         file_content="print(1)",
     )
 
-    found = av_repo.get_by_filepath_and_commit(filepath="src/module.py", commit_id=commit)
+    found = av_repo.get_by_filepath_and_commit(filepath="src/module.py", commit_sha=commit)
 
     assert found is not None
     assert found.id == expected.id
@@ -53,13 +53,13 @@ def test_get_by_filepath_and_commit_normalizes_backslashes(db_session: Session, 
     av_repo = create_artifact_version_repo(db_session)
     expected = av_repo.add(
         artifact_id=art.id,
-        commit_id=commit,
+        commit_sha=commit,
         commit_datetime=ts,
         status="active",
         file_content="x",
     )
 
-    found = av_repo.get_by_filepath_and_commit(filepath=r"src\nested\file.py", commit_id=commit)
+    found = av_repo.get_by_filepath_and_commit(filepath=r"src\nested\file.py", commit_sha=commit)
 
     assert found is not None
     assert found.id == expected.id
@@ -72,13 +72,13 @@ def test_get_by_filepath_and_commit_returns_none_wrong_commit(db_session: Sessio
     av_repo = create_artifact_version_repo(db_session)
     av_repo.add(
         artifact_id=art.id,
-        commit_id="e" * 40,
+        commit_sha="e" * 40,
         commit_datetime=ts,
         status="active",
         file_content="a",
     )
 
-    assert av_repo.get_by_filepath_and_commit(filepath="lib/x.py", commit_id="f" * 40) is None
+    assert av_repo.get_by_filepath_and_commit(filepath="lib/x.py", commit_sha="f" * 40) is None
 
 
 def test_get_by_filepath_and_commit_returns_none_unknown_path(db_session: Session, git_row_id: int) -> None:
@@ -89,13 +89,13 @@ def test_get_by_filepath_and_commit_returns_none_unknown_path(db_session: Sessio
     av_repo = create_artifact_version_repo(db_session)
     av_repo.add(
         artifact_id=art.id,
-        commit_id=commit,
+        commit_sha=commit,
         commit_datetime=ts,
         status="active",
         file_content="",
     )
 
-    assert av_repo.get_by_filepath_and_commit(filepath="other/path.py", commit_id=commit) is None
+    assert av_repo.get_by_filepath_and_commit(filepath="other/path.py", commit_sha=commit) is None
 
 
 def test_get_by_filepath_and_commit_prefers_highest_id_on_duplicates(db_session: Session, git_row_id: int) -> None:
@@ -106,20 +106,20 @@ def test_get_by_filepath_and_commit_prefers_highest_id_on_duplicates(db_session:
     av_repo = create_artifact_version_repo(db_session)
     first = av_repo.add(
         artifact_id=art.id,
-        commit_id=commit,
+        commit_sha=commit,
         commit_datetime=ts,
         status="updated",
         file_content="first",
     )
     second = av_repo.add(
         artifact_id=art.id,
-        commit_id=commit,
+        commit_sha=commit,
         commit_datetime=ts,
         status="updated",
         file_content="second",
     )
 
-    found = av_repo.get_by_filepath_and_commit(filepath="dup/path.py", commit_id=commit)
+    found = av_repo.get_by_filepath_and_commit(filepath="dup/path.py", commit_sha=commit)
 
     assert found is not None
     assert found.id == second.id

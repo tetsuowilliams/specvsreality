@@ -18,7 +18,15 @@ from specvsreality_api.schemas.gantt import (
     GanttRequirementBlock,
 )
 from specvsreality_api.schemas.requirement_latest_version import RequirementLatestVersionResponse
+from specvsreality_api.schemas.requirement_version_tree import (
+    ImplementsEvidenceItem,
+    RequirementTreeArtifactVersion,
+    RequirementTreeVersion,
+    RequirementVersionTreeResponse,
+)
+from specvsreality_repositories.models.artifact import Artifact
 from specvsreality_repositories.models.artifact_version import ArtifactVersion
+from specvsreality_repositories.models.implements import Implements
 from specvsreality_repositories.models.requirement import Requirement
 from specvsreality_repositories.models.requirement_version import RequirementVersion
 from specvsreality_repositories.repos import (
@@ -32,21 +40,15 @@ _STATUS_IMPLEMENTED = "implemented"
 _STATUS_NOT_IMPLEMENTED = "not_implemented"
 
 
-def _requirement_segment_status(
-    *,
-    requirement_version_id: int,
-    artifact_versions_by_rv: dict[int, list[ArtifactVersion]],
-) -> str:
-    for av in artifact_versions_by_rv.get(requirement_version_id, ()):
-        if av.status == VersionStatus.ACTIVE.value:
-            return _STATUS_IMPLEMENTED
+def _requirement_segment_status(*, implemented: bool | None) -> str:
+    if implemented is True:
+        return _STATUS_IMPLEMENTED
     return _STATUS_NOT_IMPLEMENTED
 
 
 def _history_for_requirement_versions(
     versions: list[RequirementVersion],
     *,
-    artifact_versions_by_rv: dict[int, list[ArtifactVersion]],
     end_cap: datetime,
 ) -> list[GanttHistorySegment]:
     if not versions:
@@ -55,17 +57,74 @@ def _history_for_requirement_versions(
     for i, rv in enumerate(versions):
         start = rv.commit_datetime
         end = versions[i + 1].commit_datetime if i + 1 < len(versions) else end_cap
-        status = _requirement_segment_status(
-            requirement_version_id=rv.id,
-            artifact_versions_by_rv=artifact_versions_by_rv,
-        )
+        status = _requirement_segment_status(implemented=rv.implemented)
         out.append(GanttHistorySegment(start=start, end=end, status=status, commit=None))
     return out
+
+
+def _requirement_version_at(
+    versions: list[RequirementVersion],
+    at: datetime,
+) -> RequirementVersion | None:
+    """Latest requirement version whose commit time is at or before ``at``."""
+    active: RequirementVersion | None = None
+    for rv in versions:
+        if rv.commit_datetime <= at:
+            active = rv
+    return active
+
+
+def _artifact_segment_status(
+    av: ArtifactVersion,
+    *,
+    req_versions: list[RequirementVersion],
+    rv_by_id: dict[int, RequirementVersion],
+    impl_rows: list[tuple[Implements, ArtifactVersion, Artifact]],
+) -> str:
+    """Resolve gantt color from implements links and RV evaluation, not raw AV lifecycle status."""
+    if av.status in (VersionStatus.DELETED.value, VersionStatus.INACTIVE.value):
+        return av.status
+
+    def _status_for_rv(rv: RequirementVersion | None) -> str | None:
+        if rv is None:
+            return None
+        if rv.implemented is True:
+            return _STATUS_IMPLEMENTED
+        if rv.implemented is False:
+            return _STATUS_NOT_IMPLEMENTED
+        return None
+
+    for impl, linked_av, _art in impl_rows:
+        if linked_av.id != av.id:
+            continue
+        resolved = _status_for_rv(rv_by_id.get(impl.requirement_version_id))
+        if resolved is not None:
+            return resolved
+
+    for impl, linked_av, _art in impl_rows:
+        if linked_av.artifact_id != av.artifact_id or linked_av.commit_sha != av.commit_sha:
+            continue
+        resolved = _status_for_rv(rv_by_id.get(impl.requirement_version_id))
+        if resolved is not None:
+            return resolved
+
+    active_rv = _requirement_version_at(req_versions, av.commit_datetime)
+    if active_rv is not None and active_rv.implemented is True:
+        for impl, linked_av, _art in impl_rows:
+            if impl.requirement_version_id != active_rv.id:
+                continue
+            if linked_av.artifact_id == av.artifact_id:
+                return _STATUS_IMPLEMENTED
+
+    return av.status
 
 
 def _history_for_artifact_versions(
     versions: list[ArtifactVersion],
     *,
+    req_versions: list[RequirementVersion],
+    rv_by_id: dict[int, RequirementVersion],
+    impl_rows: list[tuple[Implements, ArtifactVersion, Artifact]],
     end_cap: datetime,
 ) -> list[GanttHistorySegment]:
     if not versions:
@@ -78,8 +137,13 @@ def _history_for_artifact_versions(
             GanttHistorySegment(
                 start=start,
                 end=end,
-                status=av.status,
-                commit=av.commit_id,
+                status=_artifact_segment_status(
+                    av,
+                    req_versions=req_versions,
+                    rv_by_id=rv_by_id,
+                    impl_rows=impl_rows,
+                ),
+                commit=av.commit_sha,
             )
         )
     return out
@@ -131,9 +195,63 @@ class GanttChartFacade:
         return RequirementLatestVersionResponse(
             paper_id=requirement.paper_id,
             requirement_text=rv.requirement_text,
-            commit_id=rv.commit_id,
+            commit_sha=rv.commit_sha,
             commit_datetime=rv.commit_datetime,
         )
+
+    def get_requirement_version_tree(
+        self,
+        repo_id: int,
+        spec_id: int,
+        *,
+        requirement_id: int | None = None,
+    ) -> RequirementVersionTreeResponse:
+        requirement = self._resolved_requirement(repo_id, spec_id, requirement_id)
+        req_versions = self._gantt_data.list_requirement_versions_ordered(
+            requirement_id=requirement.id,
+        )
+        rv_ids = [rv.id for rv in req_versions]
+        impl_rows = self._gantt_data.list_implements_with_artifact_versions(
+            requirement_version_ids=rv_ids,
+        )
+
+        artifacts_by_rv: dict[int, list[RequirementTreeArtifactVersion]] = defaultdict(list)
+        for impl, av, art in impl_rows:
+            artifacts_by_rv[impl.requirement_version_id].append(
+                RequirementTreeArtifactVersion(
+                    artifact_version_id=av.id,
+                    filepath=art.filepath,
+                    commit_sha=av.commit_sha,
+                    commit_datetime=av.commit_datetime,
+                    status=av.status,
+                    file_content=av.file_content,
+                    evidence=ImplementsEvidenceItem(
+                        evidence_file=impl.evidence_file,
+                        evidence_line_number=impl.evidence_line_number,
+                        evidence_snippet=impl.evidence_snippet,
+                        evidence_relevance=impl.evidence_relevance,
+                    ),
+                )
+            )
+        for items in artifacts_by_rv.values():
+            items.sort(key=lambda item: (item.filepath, item.artifact_version_id))
+
+        versions = [
+            RequirementTreeVersion(
+                id=rv.id,
+                commit_sha=rv.commit_sha,
+                commit_datetime=rv.commit_datetime,
+                requirement_text=rv.requirement_text,
+                filepath_globs=list(rv.filepath_globs),
+                status=rv.status,
+                implemented=rv.implemented,
+                summary=rv.summary,
+                gaps=list(rv.gaps) if rv.gaps is not None else None,
+                artifact_versions=artifacts_by_rv.get(rv.id, []),
+            )
+            for rv in reversed(req_versions)
+        ]
+        return RequirementVersionTreeResponse(paper_id=requirement.paper_id, versions=versions)
 
     def get_chart(
         self,
@@ -157,15 +275,13 @@ class GanttChartFacade:
             requirement_version_ids=rv_ids,
         )
 
-        artifact_versions_by_rv: dict[int, list[ArtifactVersion]] = defaultdict(list)
+        rv_by_id = {rv.id: rv for rv in req_versions}
         filepath_by_artifact_id: dict[int, str] = {}
         for _impl, av, art in impl_rows:
-            artifact_versions_by_rv[_impl.requirement_version_id].append(av)
             filepath_by_artifact_id[av.artifact_id] = art.filepath
 
         req_history = _history_for_requirement_versions(
             req_versions,
-            artifact_versions_by_rv=artifact_versions_by_rv,
             end_cap=effective_now,
         )
         last_status = req_history[-1].status if req_history else _STATUS_NOT_IMPLEMENTED
@@ -194,6 +310,9 @@ class GanttChartFacade:
             fp = filepath_by_artifact_id[aid]
             segs = _history_for_artifact_versions(
                 versions_by_artifact.get(aid, []),
+                req_versions=req_versions,
+                rv_by_id=rv_by_id,
+                impl_rows=impl_rows,
                 end_cap=effective_now,
             )
             artifacts.append(GanttArtifactBlock(filepath=fp, history=segs))

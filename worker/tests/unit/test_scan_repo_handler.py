@@ -10,7 +10,6 @@ from sqlalchemy.orm import Session
 
 from specvsreality_messages import ScanRepoMessage
 from specvsreality_repositories.models import Base, GitRepo
-from specvsreality_worker.core import CommitWalker
 from specvsreality_worker.git_adapter import GitAdapter
 from specvsreality_worker.handlers.scan_repo import ScanRepoHandler, _clone_url_with_optional_token
 
@@ -51,7 +50,10 @@ def test_scan_repo_clones_and_updates_db(tmp_path: Path, monkeypatch) -> None:
 
     scanned: list[str] = []
 
-    class _RecordingWalker(CommitWalker):
+    class _RecordingWalker:
+        def __init__(self, adapter, repo_id: int, session: Session) -> None:
+            pass
+
         def scan_commit(self, commit_sha: str) -> None:
             scanned.append(commit_sha)
 

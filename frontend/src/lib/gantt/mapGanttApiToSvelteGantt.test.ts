@@ -5,7 +5,8 @@ import {
 	buildSvelteGanttChartOptions,
 	columnPresetForBounds,
 	mapGanttApiToRowsAndTasks,
-	mapGanttApiToTimeRanges
+	mapGanttApiToTimeRanges,
+	statusTaskClasses
 } from './mapGanttApiToSvelteGantt';
 import type { GanttChartResponse } from '$lib/api/repoCatalog';
 
@@ -93,6 +94,20 @@ describe('buildSvelteGanttChartOptions', () => {
 	it('can include segment-derived time ranges when opted in', () => {
 		const o = buildSvelteGanttChartOptions(sampleChart(), { includeSegmentTimeRanges: true });
 		expect(o.timeRanges).toHaveLength(3);
+	});
+});
+
+describe('statusTaskClasses', () => {
+	it('maps implementation and live artifact lifecycle statuses to green', () => {
+		expect(statusTaskClasses('implemented')).toBe('gantt-status-ok');
+		expect(statusTaskClasses('active')).toBe('gantt-status-ok');
+		expect(statusTaskClasses('updated')).toBe('gantt-status-ok');
+	});
+
+	it('maps negative implementation statuses to warn or bad', () => {
+		expect(statusTaskClasses('not_implemented')).toBe('gantt-status-warn');
+		expect(statusTaskClasses('deleted')).toBe('gantt-status-bad');
+		expect(statusTaskClasses('open')).toBe('gantt-status-neutral');
 	});
 });
 

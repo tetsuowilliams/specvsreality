@@ -24,6 +24,8 @@ services:
     environment:
       RABBITMQ_DEFAULT_USER: guest
       RABBITMQ_DEFAULT_PASS: guest
+      # Match worker heartbeat (30m) so long scan_repo jobs do not drop the connection mid-handler.
+      RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS: "-rabbit heartbeat 1800 consumer_timeout 7200000"
     healthcheck:
       test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
       interval: 10s
@@ -72,6 +74,8 @@ services:
       REPO_CLONE_ROOT: /repos
       GIT_CLONE_TOKEN: ${GIT_CLONE_TOKEN:-}
       GIT_CLONE_USERNAME: ${GIT_CLONE_USERNAME:-x-access-token}
+      # Logfire/Opik: use worker/.env (env_file). Do not set LOGFIRE_* here with ${VAR:-}
+      # defaults — an empty value overrides env_file and forces Opik OTLP (404 if Opik is down).
     volumes:
       - repo_clones:/repos
     depends_on:

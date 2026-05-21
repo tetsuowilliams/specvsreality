@@ -12,6 +12,7 @@ from specvsreality_repositories.models.artifact_version import ArtifactVersion
 from specvsreality_repositories.models.implements import Implements
 from specvsreality_repositories.models.requirement import Requirement
 from specvsreality_repositories.models.requirement_version import RequirementVersion
+from specvsreality_repositories.repos.enums import VersionStatus
 
 
 class RequirementVersionRepo:
@@ -32,6 +33,15 @@ class RequirementVersionRepo:
             .limit(1)
         )
         return self._session.scalars(stmt).first()
+
+    def get_versions_at_commit(self, *, commit_sha: str) -> list[RequirementVersion]:
+        """All version rows for ``commit_sha``."""
+        stmt = (
+            select(RequirementVersion)
+            .where(RequirementVersion.commit_sha == commit_sha)
+            .where(RequirementVersion.status.in_([VersionStatus.ACTIVE.value, VersionStatus.UPDATED.value]))
+        )
+        return list(self._session.scalars(stmt).all())
 
     def list_latest(self, *, spec_id: int | None = None) -> list[RequirementVersion]:
         """Latest version row for each requirement (optionally scoped to ``spec_id``)."""
@@ -97,7 +107,7 @@ class RequirementVersionRepo:
         self,
         *,
         requirement_id: int,
-        commit_id: str,
+        commit_sha: str,
         commit_datetime: datetime,
         requirement_text: str,
         filepath_globs: list[str],
@@ -105,13 +115,31 @@ class RequirementVersionRepo:
     ) -> RequirementVersion:
         row = RequirementVersion(
             requirement_id=requirement_id,
-            commit_id=commit_id,
+            commit_sha=commit_sha,
             commit_datetime=commit_datetime,
             requirement_text=requirement_text,
             filepath_globs=filepath_globs,
             status=status,
         )
         self._session.add(row)
+        self._session.flush()
+        return row
+
+    def update_evaluation(
+        self,
+        *,
+        requirement_version_id: int,
+        implemented: bool,
+        summary: str,
+        gaps: list[str],
+    ) -> RequirementVersion | None:
+        row = self.get_by_id(requirement_version_id)
+        if row is None:
+            return None
+
+        row.implemented = implemented
+        row.summary = summary
+        row.gaps = gaps
         self._session.flush()
         return row
 

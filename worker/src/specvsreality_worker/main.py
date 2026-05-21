@@ -3,13 +3,18 @@
 from __future__ import annotations
 
 import logging
+import os
 import sys
 from pathlib import Path
 
 from dotenv import load_dotenv
 
 from specvsreality_worker.bootstrap import create_queue_consumer
-from specvsreality_worker.observability import init_worker_observability
+from specvsreality_worker.agents.pydantic_ai_verbose import configure_verbose_loggers
+from specvsreality_worker.observability import (
+    init_worker_observability,
+    shutdown_worker_observability,
+)
 
 
 def _load_worker_dotenv() -> None:
@@ -26,13 +31,15 @@ def _load_worker_dotenv() -> None:
 
 
 def main() -> None:
+    _load_worker_dotenv()
+    log_level = os.environ.get("WORKER_LOG_LEVEL", "INFO").strip().upper()
     logging.basicConfig(
-        level=logging.INFO,
+        level=getattr(logging, log_level, logging.INFO),
         format="%(asctime)s %(levelname)s %(name)s %(message)s",
         stream=sys.stderr,
     )
     log = logging.getLogger(__name__)
-    _load_worker_dotenv()
+    configure_verbose_loggers()
     init_worker_observability()
     consumer = create_queue_consumer()
     try:
@@ -41,6 +48,7 @@ def main() -> None:
         log.info("interrupted; stopping")
     finally:
         consumer.stop()
+        shutdown_worker_observability()
 
 
 if __name__ == "__main__":

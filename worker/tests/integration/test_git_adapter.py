@@ -11,7 +11,13 @@ from fixtures.git_repos import (
     make_linear_three_commit_repo,
     rename_default_branch_to_main,
 )
-from specvsreality_worker.git_adapter import GitAdapter, GitAdapterError
+from specvsreality_worker.core.spec_detection import ArtifactType
+from specvsreality_worker.git_adapter import (
+    ChangedPath,
+    GitAdapter,
+    GitAdapterError,
+    PathChangeState,
+)
 
 
 def test_default_branch_prefers_main(tmp_path) -> None:
@@ -54,27 +60,76 @@ def test_changed_paths_root_commit_lists_all_blobs(tmp_path) -> None:
     path, shas = make_linear_three_commit_repo(tmp_path, use_main=True)
     adapter = GitAdapter(path)
     info = adapter.changed_paths(shas[0])
-    assert info.new_files == ["README.md"]
-    assert info.modified_files == []
-    assert info.deleted_files == []
+    assert info.paths == [
+        ChangedPath(path="README.md", state=PathChangeState.NEW, artifact_type=ArtifactType.CODE),
+    ]
 
 
 def test_changed_paths_middle_commit(tmp_path) -> None:
     path, shas = make_linear_three_commit_repo(tmp_path, use_main=True)
     adapter = GitAdapter(path)
     info = adapter.changed_paths(shas[1])
-    assert info.new_files == ["docs/feature.spec.md"]
-    assert info.modified_files == []
-    assert info.deleted_files == []
+    assert info.paths == [
+        ChangedPath(
+            path="docs/feature.spec.md",
+            state=PathChangeState.NEW,
+            artifact_type=ArtifactType.CODE,
+        ),
+    ]
 
 
 def test_changed_paths_modification_commit(tmp_path) -> None:
     path, shas = make_linear_three_commit_repo(tmp_path, use_main=True)
     adapter = GitAdapter(path)
     info = adapter.changed_paths(shas[2])
-    assert info.new_files == []
-    assert info.modified_files == ["README.md"]
-    assert info.deleted_files == []
+    assert info.paths == [
+        ChangedPath(path="README.md", state=PathChangeState.MODIFIED, artifact_type=ArtifactType.CODE),
+    ]
+
+
+def test_changed_paths_filters_tooling_directories(tmp_path) -> None:
+    path = tmp_path / "r"
+    path.mkdir()
+    repo = init_repo_with_config(path)
+    rename_default_branch_to_main(repo)
+    sha = add_commit(
+        repo,
+        "mixed paths",
+        {
+            "src/main.py": "print('hi')\n",
+            ".cursor/rules.md": "ignore me\n",
+            ".specify/spec.md": "ignore me\n",
+            ".skills/foo/SKILL.md": "ignore me\n",
+        },
+    )
+    adapter = GitAdapter(path)
+    info = adapter.changed_paths(sha)
+    assert info.paths == [
+        ChangedPath(path="src/main.py", state=PathChangeState.NEW, artifact_type=ArtifactType.CODE),
+    ]
+
+
+def test_changed_paths_classifies_spec_files(tmp_path) -> None:
+    path = tmp_path / "r"
+    path.mkdir()
+    repo = init_repo_with_config(path)
+    rename_default_branch_to_main(repo)
+    sha = add_commit(
+        repo,
+        "add spec bundle",
+        {
+            "specs/feature/spec.md": "# Spec\n",
+            "specs/feature/plan.md": "# Plan\n",
+            "src/main.py": "print('hi')\n",
+        },
+    )
+    adapter = GitAdapter(path)
+    info = adapter.changed_paths(sha)
+    assert info.paths == [
+        ChangedPath(path="specs/feature/plan.md", state=PathChangeState.NEW, artifact_type=ArtifactType.SPEC),
+        ChangedPath(path="specs/feature/spec.md", state=PathChangeState.NEW, artifact_type=ArtifactType.SPEC),
+        ChangedPath(path="src/main.py", state=PathChangeState.NEW, artifact_type=ArtifactType.CODE),
+    ]
 
 
 def test_file_at_commit_reads_utf8_text(tmp_path) -> None:

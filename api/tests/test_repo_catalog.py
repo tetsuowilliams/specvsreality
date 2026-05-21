@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 from collections.abc import Generator
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -21,9 +22,14 @@ from specvsreality_api.routes import health
 from specvsreality_repositories.repos import (
     create_git_repo_repo,
     create_requirement_repo,
+    create_requirement_version_repo,
     create_spec_repo,
     create_spec_version_repo,
 )
+from specvsreality_repositories.repos.enums import VersionStatus
+
+_COMMIT_SHA = "a" * 40
+_COMMIT_DT = datetime(2026, 1, 15, tzinfo=UTC)
 
 os.environ.setdefault("TESTCONTAINERS_RYUK_DISABLED", "true")
 
@@ -110,12 +116,20 @@ def test_get_repo_catalog_and_spec_detail(catalog_client: TestClient, db_session
         spec_md="# s",
         tasks_md="- t",
         plan_md="p",
+        commit_sha=_COMMIT_SHA,
+        created_at=_COMMIT_DT,
+        committed_at=_COMMIT_DT,
+        status=VersionStatus.ACTIVE,
     )
     create_spec_version_repo(db_session).add(
         spec_id=spec.id,
         spec_md="# s2",
         tasks_md=None,
         plan_md=None,
+        commit_sha=_COMMIT_SHA,
+        created_at=_COMMIT_DT,
+        committed_at=_COMMIT_DT,
+        status=VersionStatus.ACTIVE,
     )
 
     cat = catalog_client.get(f"/repos/{gid}/catalog")
@@ -136,6 +150,50 @@ def test_get_repo_catalog_and_spec_detail(catalog_client: TestClient, db_session
     assert d["versions"][1]["spec_md"] == "# s2"
     assert d["versions"][1]["tasks_md"] is None
     assert d["versions"][1]["plan_md"] is None
+    assert len(d["requirements"]) == 2
+    assert {r["paper_id"] for r in d["requirements"]} == {"req-a", "req-b"}
+    assert all(r["has_version"] is False for r in d["requirements"])
+    assert all(r["implemented"] is None for r in d["requirements"])
+
+
+def test_spec_detail_requirements_latest_implementation_status(
+    catalog_client: TestClient, db_session: Session
+) -> None:
+    gid = create_git_repo_repo(db_session).add(
+        name="c2",
+        url="https://example.test/c2.git",
+        cursor_position="d" * 40,
+        location="/tmp/c2",
+    ).id
+    spec = create_spec_repo(db_session).add(paper_id="paper-2", repo_id=gid)
+    r_done = create_requirement_repo(db_session).add(spec_id=spec.id, paper_id="done")
+    r_open = create_requirement_repo(db_session).add(spec_id=spec.id, paper_id="open")
+    rv_done = create_requirement_version_repo(db_session).add(
+        requirement_id=r_done.id,
+        commit_sha="a" * 40,
+        commit_datetime=_COMMIT_DT,
+        requirement_text="done text",
+        filepath_globs=["*.py"],
+        status="open",
+    )
+    rv_done.implemented = True
+    create_requirement_version_repo(db_session).add(
+        requirement_id=r_open.id,
+        commit_sha="b" * 40,
+        commit_datetime=_COMMIT_DT,
+        requirement_text="open text",
+        filepath_globs=["*.py"],
+        status="open",
+    )
+    db_session.flush()
+
+    detail = catalog_client.get(f"/repos/{gid}/specs/{spec.id}")
+    assert detail.status_code == 200
+    reqs = {r["paper_id"]: r for r in detail.json()["requirements"]}
+    assert reqs["done"]["has_version"] is True
+    assert reqs["done"]["implemented"] is True
+    assert reqs["open"]["has_version"] is True
+    assert reqs["open"]["implemented"] is None
 
 
 def test_catalog_unknown_repo_404(catalog_client: TestClient) -> None:

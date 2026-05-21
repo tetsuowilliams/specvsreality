@@ -33,14 +33,14 @@ class ArtifactVersionRepo:
         )
         return self._session.scalars(stmt).first()
 
-    def get_by_filepath_and_commit(self, *, filepath: str, commit_id: str) -> ArtifactVersion | None:
-        """``ArtifactVersion`` for this normalized ``filepath`` at ``commit_id`` (newest row id if duplicates)."""
+    def get_by_filepath_and_commit(self, *, filepath: str, commit_sha: str) -> ArtifactVersion | None:
+        """``ArtifactVersion`` for this normalized ``filepath`` at ``commit_sha`` (newest row id if duplicates)."""
         normalized = filepath.replace("\\", "/")
         av = ArtifactVersion
         stmt = (
             select(av)
             .join(Artifact, Artifact.id == av.artifact_id)
-            .where(Artifact.filepath == normalized, av.commit_id == commit_id)
+            .where(Artifact.filepath == normalized, av.commit_sha == commit_sha)
             .order_by(desc(av.id))
             .limit(1)
         )
@@ -50,14 +50,14 @@ class ArtifactVersionRepo:
         self,
         *,
         artifact_id: int,
-        commit_id: str,
+        commit_sha: str,
         commit_datetime: datetime,
         status: str,
         file_content: str,
     ) -> ArtifactVersion:
         row = ArtifactVersion(
             artifact_id=artifact_id,
-            commit_id=commit_id,
+            commit_sha=commit_sha,
             commit_datetime=commit_datetime,
             status=status,
             file_content=file_content,

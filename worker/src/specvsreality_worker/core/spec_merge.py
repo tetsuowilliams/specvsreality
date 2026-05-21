@@ -13,6 +13,8 @@ from specvsreality_worker.core.artifact_merge import ArtifactMerge
 from specvsreality_worker.core.commit_context import CommitContext
 from specvsreality_worker.core.requirement_merge import RequirementMerge
 from specvsreality_worker.git_adapter import GitAdapter, GitCommitPathInformation
+from specvsreality_worker.core.spec_detection import ArtifactType, SpecDetection
+from specvsreality_repositories.repos.enums import VersionStatus
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +32,7 @@ class SpecMerge:
         spec_extraction_agent: SpecExtractionAgent,
         implements_evaluation_agent: ImplementsEvaluationAgent,
         git_adapter: GitAdapter,
+        spec_detection: SpecDetection,
     ) -> None:
         self._spec_repo = spec_repo
         self._spec_version_repo = spec_version_repo
@@ -39,14 +42,7 @@ class SpecMerge:
         self._spec_extraction_agent = spec_extraction_agent
         self._implements_evaluation_agent = implements_evaluation_agent
         self._git_adapter = git_adapter
-
-    def _get_parent_spec_folder(self, relpath: str) -> str | None:
-        parent = PurePosixPath(relpath.replace("\\", "/")).parent.name
-        return parent or None
-
-    def _is_spec_file(self, relpath: str) -> bool:
-        basename = PurePosixPath(relpath.replace("\\", "/")).name
-        return basename.lower() in self.SPEC_FILENAMES
+        self._spec_detection = spec_detection
 
     def merge_specs(
         self,
@@ -54,21 +50,30 @@ class SpecMerge:
         commit: CommitContext,
         changes: GitCommitPathInformation,
     ) -> None:
-        live_files = [p.replace("\\", "/") for p in (changes.new_files + changes.modified_files)]
+        logger.info(
+            f"merge_specs repo_id={commit.repo_id} commit_sha={commit.commit_sha[:7]} changed_paths={len(changes.paths)}",
+        )
 
-        logger.info("merge_specs repo_id=%s commit_sha=%s live_files=%s", commit.repo_id, commit.commit_sha, live_files)
-
-        implementation_pairs = []
-
-        for path in live_files:
-            if not self._is_spec_file(path):
+        for file_change in changes.paths:
+            if file_change.artifact_type != ArtifactType.SPEC:
                 continue
 
-            parent_folder = self._get_parent_spec_folder(path)
+            parent_folder = self._spec_detection.get_parent_spec_folder(file_change.path)
+
             if parent_folder is None:
                 continue
 
-            parent_path = PurePosixPath(path.replace("\\", "/")).parent
+            parent_path = PurePosixPath(file_change.path.replace("\\", "/")).parent
+            spec_md_path = str(parent_path / "spec.md")
+            if file_change.artifact_type != ArtifactType.SPEC:
+                continue
+
+            parent_folder = self._spec_detection.get_parent_spec_folder(file_change.path)
+
+            if parent_folder is None:
+                continue
+
+            parent_path = PurePosixPath(file_change.path.replace("\\", "/")).parent
             spec_md_path = str(parent_path / "spec.md")
             tasks_md_path = str(parent_path / "tasks.md")
             plan_md_path = str(parent_path / "plan.md")
@@ -98,38 +103,14 @@ class SpecMerge:
                 spec_md=spec_md,
                 tasks_md=tasks_md,
                 plan_md=plan_md,
+                commit_sha=commit.commit_sha,
+                created_at=commit.commit_datetime,
+                committed_at=commit.commit_datetime,
+                status=VersionStatus.ACTIVE.value,
             )
 
-            implementation_pairs += self._requirement_merge.merge_requirements(
+            self._requirement_merge.merge_requirements(
                 db_spec=db_spec,
                 extracted_spec=eph_spec,
                 commit=commit,
             )
-
-        for path in changes.new_files + changes.modified_files:
-            if not self._is_spec_file(path):
-                continue
-
-            implementation_pairs += self._artifact_merge.merge_new_updated_artifact(
-                relpath=path,
-                commit=commit
-            )
-
-        for path in changes.deleted_files:
-            if not self._is_spec_file(path):
-                continue
-
-            self._artifact_merge.merge_deleted_artifact(
-                relpath=path,
-                commit=commit,
-            )
-
-        # Dedupe the pairs as there could be crossover from top down and bottom up.
-        implementation_pairs = list(dict.fromkeys(implementation_pairs))
-
-        self._artifact_merge.evaluate_and_merge_implementations(
-            implementation_pairs=implementation_pairs,
-            commit=commit,
-        )
-        
-        return implementation_pairs

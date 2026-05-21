@@ -99,7 +99,7 @@ def test_gantt_meta_follows_last_requirement_segment(db_session: Session, git_ro
     req = create_requirement_repo(db_session).add(spec_id=spec.id, paper_id="fr-001")
     rv1 = create_requirement_version_repo(db_session).add(
         requirement_id=req.id,
-        commit_id="a" * 40,
+        commit_sha="a" * 40,
         commit_datetime=ts0,
         requirement_text="v1",
         filepath_globs=["*.py"],
@@ -107,7 +107,7 @@ def test_gantt_meta_follows_last_requirement_segment(db_session: Session, git_ro
     )
     rv2 = create_requirement_version_repo(db_session).add(
         requirement_id=req.id,
-        commit_id="b" * 40,
+        commit_sha="b" * 40,
         commit_datetime=ts1,
         requirement_text="v2",
         filepath_globs=["*.py"],
@@ -116,14 +116,14 @@ def test_gantt_meta_follows_last_requirement_segment(db_session: Session, git_ro
     art = create_artifact_repo(db_session).add(filepath="count.py")
     av_active = create_artifact_version_repo(db_session).add(
         artifact_id=art.id,
-        commit_id="a" * 40,
+        commit_sha="a" * 40,
         commit_datetime=ts0,
         status=VersionStatus.ACTIVE.value,
         file_content="x",
     )
     av_inactive = create_artifact_version_repo(db_session).add(
         artifact_id=art.id,
-        commit_id="b" * 40,
+        commit_sha="b" * 40,
         commit_datetime=ts1,
         status=VersionStatus.INACTIVE.value,
         file_content="y",
@@ -136,6 +136,9 @@ def test_gantt_meta_follows_last_requirement_segment(db_session: Session, git_ro
         requirement_version_id=rv2.id,
         artifact_version_id=av_inactive.id,
     )
+    rv1.implemented = True
+    rv2.implemented = False
+    db_session.flush()
 
     facade = create_gantt_chart_facade(db_session)
     chart = facade.get_chart(repo_id=git_row_id, spec_id=spec.id, now=now)
@@ -154,7 +157,7 @@ def test_get_requirement_latest_version_returns_newest_text(db_session: Session,
     req = create_requirement_repo(db_session).add(spec_id=spec.id, paper_id="REQ-LV")
     create_requirement_version_repo(db_session).add(
         requirement_id=req.id,
-        commit_id="a" * 40,
+        commit_sha="a" * 40,
         commit_datetime=ts0,
         requirement_text="old",
         filepath_globs=["*.py"],
@@ -162,7 +165,7 @@ def test_get_requirement_latest_version_returns_newest_text(db_session: Session,
     )
     create_requirement_version_repo(db_session).add(
         requirement_id=req.id,
-        commit_id="b" * 40,
+        commit_sha="b" * 40,
         commit_datetime=ts1,
         requirement_text="newest",
         filepath_globs=["*.py"],
@@ -172,7 +175,7 @@ def test_get_requirement_latest_version_returns_newest_text(db_session: Session,
     out = facade.get_requirement_latest_version(git_row_id, spec.id, requirement_id=req.id)
     assert out.requirement_text == "newest"
     assert out.paper_id == "REQ-LV"
-    assert out.commit_id == "b" * 40
+    assert out.commit_sha == "b" * 40
 
 
 def test_get_requirement_latest_version_404_when_no_versions(db_session: Session, git_row_id: int) -> None:
@@ -191,31 +194,33 @@ def test_artifacts_sorted_by_filepath_and_raw_status(db_session: Session, git_ro
     req = create_requirement_repo(db_session).add(spec_id=spec.id, paper_id="r1")
     rv = create_requirement_version_repo(db_session).add(
         requirement_id=req.id,
-        commit_id="a" * 40,
+        commit_sha="a" * 40,
         commit_datetime=ts,
         requirement_text="t",
         filepath_globs=["*.py"],
         status="open",
     )
+    rv.implemented = True
+    db_session.flush()
     z = create_artifact_repo(db_session).add(filepath="zebra.py")
     a = create_artifact_repo(db_session).add(filepath="a.py")
     av_z = create_artifact_version_repo(db_session).add(
         artifact_id=z.id,
-        commit_id="z" * 40,
+        commit_sha="z" * 40,
         commit_datetime=ts,
         status=VersionStatus.ACTIVE.value,
         file_content="",
     )
     av_a1 = create_artifact_version_repo(db_session).add(
         artifact_id=a.id,
-        commit_id="c" * 40,
+        commit_sha="c" * 40,
         commit_datetime=ts,
         status=VersionStatus.ACTIVE.value,
         file_content="",
     )
     av_a2 = create_artifact_version_repo(db_session).add(
         artifact_id=a.id,
-        commit_id="d" * 40,
+        commit_sha="d" * 40,
         commit_datetime=ts + timedelta(hours=1),
         status=VersionStatus.DELETED.value,
         file_content="",
@@ -231,9 +236,9 @@ def test_artifacts_sorted_by_filepath_and_raw_status(db_session: Session, git_ro
 
     a_block = chart.artifacts[0]
     assert len(a_block.history) == 2
-    assert a_block.history[0].status == VersionStatus.ACTIVE.value
+    assert a_block.history[0].status == "implemented"
     assert a_block.history[1].status == VersionStatus.DELETED.value
-    assert a_block.history[0].commit == av_a1.commit_id
+    assert a_block.history[0].commit == av_a1.commit_sha
 
 
 def test_multiple_requirements_without_id_returns_400(db_session: Session, git_row_id: int) -> None:
@@ -254,7 +259,7 @@ def test_multiple_requirements_with_id_selects_requirement(db_session: Session, 
     r2 = create_requirement_repo(db_session).add(spec_id=spec.id, paper_id="beta")
     rv2 = create_requirement_version_repo(db_session).add(
         requirement_id=r2.id,
-        commit_id="b" * 40,
+        commit_sha="b" * 40,
         commit_datetime=datetime(2026, 3, 1, tzinfo=UTC),
         requirement_text="only on beta",
         filepath_globs=["*.py"],
@@ -263,7 +268,7 @@ def test_multiple_requirements_with_id_selects_requirement(db_session: Session, 
     art = create_artifact_repo(db_session).add(filepath="only_beta.py")
     av = create_artifact_version_repo(db_session).add(
         artifact_id=art.id,
-        commit_id="b" * 40,
+        commit_sha="b" * 40,
         commit_datetime=datetime(2026, 3, 1, tzinfo=UTC),
         status=VersionStatus.ACTIVE.value,
         file_content="",
@@ -324,7 +329,7 @@ def test_meta_true_when_latest_segment_implemented(db_session: Session, git_row_
     req = create_requirement_repo(db_session).add(spec_id=spec.id, paper_id="r")
     rv1 = create_requirement_version_repo(db_session).add(
         requirement_id=req.id,
-        commit_id="a" * 40,
+        commit_sha="a" * 40,
         commit_datetime=ts0,
         requirement_text="v1",
         filepath_globs=["*.py"],
@@ -332,7 +337,7 @@ def test_meta_true_when_latest_segment_implemented(db_session: Session, git_row_
     )
     rv2 = create_requirement_version_repo(db_session).add(
         requirement_id=req.id,
-        commit_id="b" * 40,
+        commit_sha="b" * 40,
         commit_datetime=ts1,
         requirement_text="v2",
         filepath_globs=["*.py"],
@@ -341,14 +346,105 @@ def test_meta_true_when_latest_segment_implemented(db_session: Session, git_row_
     art = create_artifact_repo(db_session).add(filepath="f.py")
     av1 = create_artifact_version_repo(db_session).add(
         artifact_id=art.id,
-        commit_id="a" * 40,
+        commit_sha="a" * 40,
         commit_datetime=ts0,
         status=VersionStatus.INACTIVE.value,
         file_content="",
     )
     av2 = create_artifact_version_repo(db_session).add(
         artifact_id=art.id,
-        commit_id="b" * 40,
+        commit_sha="b" * 40,
+        commit_datetime=ts1,
+        status=VersionStatus.ACTIVE.value,
+        file_content="",
+    )
+    create_implements_repo(db_session).add(requirement_version_id=rv1.id, artifact_version_id=av1.id)
+    create_implements_repo(db_session).add(requirement_version_id=rv2.id, artifact_version_id=av2.id)
+    rv2.implemented = True
+    db_session.flush()
+
+    facade = create_gantt_chart_facade(db_session)
+    chart = facade.get_chart(repo_id=git_row_id, spec_id=spec.id, now=now)
+    assert chart.meta.requirement_implemented is True
+    assert chart.requirement.history[-1].status == "implemented"
+    assert chart.artifacts[0].history[-1].status == "implemented"
+
+
+def test_artifact_segment_implemented_when_linked_with_updated_status(
+    db_session: Session, git_row_id: int
+) -> None:
+    ts = datetime(2026, 3, 1, tzinfo=UTC)
+    now = datetime(2026, 5, 1, tzinfo=UTC)
+    spec = create_spec_repo(db_session).add(paper_id="p-upd", repo_id=git_row_id)
+    req = create_requirement_repo(db_session).add(spec_id=spec.id, paper_id="r")
+    rv = create_requirement_version_repo(db_session).add(
+        requirement_id=req.id,
+        commit_sha="a" * 40,
+        commit_datetime=ts,
+        requirement_text="t",
+        filepath_globs=["*.py"],
+        status="open",
+    )
+    rv.implemented = True
+    db_session.flush()
+    art = create_artifact_repo(db_session).add(filepath="lib.py")
+    av_linked = create_artifact_version_repo(db_session).add(
+        artifact_id=art.id,
+        commit_sha="a" * 40,
+        commit_datetime=ts,
+        status=VersionStatus.UPDATED.value,
+        file_content="",
+    )
+    create_implements_repo(db_session).add(
+        requirement_version_id=rv.id,
+        artifact_version_id=av_linked.id,
+    )
+
+    chart = create_gantt_chart_facade(db_session).get_chart(
+        repo_id=git_row_id, spec_id=spec.id, now=now
+    )
+    assert chart.artifacts[0].history[0].status == "implemented"
+
+
+def test_artifact_segment_green_when_linked_to_implemented_rv(
+    db_session: Session, git_row_id: int
+) -> None:
+    ts0 = datetime(2026, 3, 1, tzinfo=UTC)
+    ts1 = datetime(2026, 3, 10, tzinfo=UTC)
+    now = datetime(2026, 4, 1, tzinfo=UTC)
+    spec = create_spec_repo(db_session).add(paper_id="p-art-impl", repo_id=git_row_id)
+    req = create_requirement_repo(db_session).add(spec_id=spec.id, paper_id="r")
+    rv1 = create_requirement_version_repo(db_session).add(
+        requirement_id=req.id,
+        commit_sha="a" * 40,
+        commit_datetime=ts0,
+        requirement_text="v1",
+        filepath_globs=["*.py"],
+        status="open",
+    )
+    rv2 = create_requirement_version_repo(db_session).add(
+        requirement_id=req.id,
+        commit_sha="b" * 40,
+        commit_datetime=ts1,
+        requirement_text="v2",
+        filepath_globs=["*.py"],
+        status="open",
+    )
+    rv1.implemented = False
+    rv2.implemented = True
+    db_session.flush()
+
+    art = create_artifact_repo(db_session).add(filepath="impl.py")
+    av1 = create_artifact_version_repo(db_session).add(
+        artifact_id=art.id,
+        commit_sha="a" * 40,
+        commit_datetime=ts0,
+        status=VersionStatus.ACTIVE.value,
+        file_content="",
+    )
+    av2 = create_artifact_version_repo(db_session).add(
+        artifact_id=art.id,
+        commit_sha="b" * 40,
         commit_datetime=ts1,
         status=VersionStatus.ACTIVE.value,
         file_content="",
@@ -358,8 +454,77 @@ def test_meta_true_when_latest_segment_implemented(db_session: Session, git_row_
 
     facade = create_gantt_chart_facade(db_session)
     chart = facade.get_chart(repo_id=git_row_id, spec_id=spec.id, now=now)
-    assert chart.meta.requirement_implemented is True
-    assert chart.requirement.history[-1].status == "implemented"
+
+    assert chart.requirement.history[0].status == "not_implemented"
+    assert chart.requirement.history[1].status == "implemented"
+    art_hist = chart.artifacts[0].history
+    assert art_hist[0].status == "not_implemented"
+    assert art_hist[1].status == "implemented"
+
+
+def test_requirement_version_tree_returns_versions_and_evidence(
+    db_session: Session, git_row_id: int
+) -> None:
+    ts0 = datetime(2026, 3, 1, tzinfo=UTC)
+    ts1 = datetime(2026, 3, 10, tzinfo=UTC)
+    spec = create_spec_repo(db_session).add(paper_id="p-tree", repo_id=git_row_id)
+    req = create_requirement_repo(db_session).add(spec_id=spec.id, paper_id="tree-req")
+    rv1 = create_requirement_version_repo(db_session).add(
+        requirement_id=req.id,
+        commit_sha="a" * 40,
+        commit_datetime=ts0,
+        requirement_text="older text",
+        filepath_globs=["src/**"],
+        status="open",
+    )
+    rv2 = create_requirement_version_repo(db_session).add(
+        requirement_id=req.id,
+        commit_sha="b" * 40,
+        commit_datetime=ts1,
+        requirement_text="newer text",
+        filepath_globs=["src/**"],
+        status="open",
+    )
+    rv2.implemented = True
+    rv2.summary = "Done"
+    rv2.gaps = []
+    db_session.flush()
+
+    art = create_artifact_repo(db_session).add(filepath="lib/x.py")
+    av = create_artifact_version_repo(db_session).add(
+        artifact_id=art.id,
+        commit_sha="b" * 40,
+        commit_datetime=ts1,
+        status=VersionStatus.ACTIVE.value,
+        file_content="print('hi')",
+    )
+    impl = create_implements_repo(db_session).add(
+        requirement_version_id=rv2.id,
+        artifact_version_id=av.id,
+    )
+    impl.evidence_file = "lib/x.py"
+    impl.evidence_line_number = 1
+    impl.evidence_snippet = "print('hi')"
+    impl.evidence_relevance = "implements logging"
+    db_session.flush()
+
+    facade = create_gantt_chart_facade(db_session)
+    tree = facade.get_requirement_version_tree(repo_id=git_row_id, spec_id=spec.id)
+
+    assert tree.paper_id == "tree-req"
+    assert len(tree.versions) == 2
+    assert tree.versions[0].commit_sha == "b" * 40
+    assert tree.versions[0].requirement_text == "newer text"
+    assert tree.versions[0].implemented is True
+    assert tree.versions[0].summary == "Done"
+    assert len(tree.versions[0].artifact_versions) == 1
+    av_node = tree.versions[0].artifact_versions[0]
+    assert av_node.filepath == "lib/x.py"
+    assert av_node.file_content == "print('hi')"
+    assert av_node.evidence.evidence_snippet == "print('hi')"
+    assert av_node.evidence.evidence_relevance == "implements logging"
+    assert tree.versions[1].commit_sha == "a" * 40
+    assert tree.versions[1].artifact_versions == []
 
 
 def test_facade_unknown_spec_raises_404(db_session: Session, git_row_id: int) -> None:

@@ -45,6 +45,7 @@ def test_merge_creates_requirement_and_version_when_not_in_db(
 ) -> None:
     requirement_merge._requirement_repo.get_by_spec_and_paper_id.return_value = None
     requirement_merge._requirement_repo.list_latest_active_for_spec.return_value = []
+    requirement_merge._requirement_version_repo.get_latest_for_requirement.return_value = None
     new_row = SimpleNamespace(id=100)
     requirement_merge._requirement_repo.add.return_value = new_row
     new_rv = SimpleNamespace(id=200)
@@ -63,6 +64,8 @@ def test_merge_creates_requirement_and_version_when_not_in_db(
     requirement_merge._requirement_version_repo.add.assert_called_once()
     call = requirement_merge._requirement_version_repo.add.call_args
     assert call.kwargs["requirement_id"] == 100
+    assert call.kwargs["commit_sha"] == commit.commit_sha
+    assert call.kwargs["commit_datetime"] == commit.commit_datetime
     assert call.kwargs["requirement_text"] == "Do the thing"
     assert call.kwargs["filepath_globs"] == ["*.py"]
     assert call.kwargs["status"] == VersionStatus.ACTIVE.value
@@ -118,6 +121,7 @@ def test_merge_adds_updated_version_when_text_changes(
     requirement_merge._requirement_version_repo.add.assert_called_once()
     call = requirement_merge._requirement_version_repo.add.call_args
     assert call.kwargs["requirement_id"] == 10
+    assert call.kwargs["commit_sha"] == commit.commit_sha
     assert call.kwargs["requirement_text"] == "new"
     assert call.kwargs["status"] == VersionStatus.UPDATED.value
 
@@ -137,6 +141,7 @@ def test_merge_marks_missing_requirement_inactive(
     requirement_merge._requirement_version_repo.add.assert_called_once()
     call = requirement_merge._requirement_version_repo.add.call_args
     assert call.kwargs["requirement_id"] == 55
+    assert call.kwargs["commit_sha"] == commit.commit_sha
     assert call.kwargs["requirement_text"] == ""
     assert call.kwargs["filepath_globs"] == []
     assert call.kwargs["status"] == VersionStatus.INACTIVE.value

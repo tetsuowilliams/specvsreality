@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -22,8 +22,11 @@ class RequirementVersion(Base):
         ForeignKey("requirement.id", ondelete="CASCADE"),
         nullable=False,
     )
-    commit_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    commit_sha: Mapped[str] = mapped_column(String(64), nullable=False)
     commit_datetime: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     requirement_text: Mapped[str] = mapped_column(Text, nullable=False)
     filepath_globs: Mapped[list[str]] = mapped_column(ARRAY(String), nullable=False)
     status: Mapped[str] = mapped_column(String(64), nullable=False)
+    implemented: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    gaps: Mapped[list[str] | None] = mapped_column(ARRAY(String), nullable=True)

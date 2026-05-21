@@ -107,9 +107,10 @@ function collectGlobalBounds(chart: GanttChartResponse): GanttTimelineBounds {
 	return { from: min - pad, to: max + pad };
 }
 
-function statusTaskClasses(status: string): string {
+/** Maps API segment status to gantt bar classes (aligned with implementationStatus themes). */
+export function statusTaskClasses(status: string): string {
 	const s = status.toLowerCase();
-	if (s === 'implemented' || s === 'active') return 'gantt-status-ok';
+	if (s === 'implemented' || s === 'active' || s === 'updated') return 'gantt-status-ok';
 	if (s === 'not_implemented' || s === 'inactive') return 'gantt-status-warn';
 	if (s === 'deleted') return 'gantt-status-bad';
 	return 'gantt-status-neutral';

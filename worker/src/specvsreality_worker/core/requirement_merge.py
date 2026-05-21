@@ -32,18 +32,18 @@ class RequirementMerge:
         db_spec: Spec,
         extracted_spec: SpecExtractionResult,
         commit: CommitContext,
-    ) -> list[tuple[int, str]]:
+    ) -> None:
         updated_spec_reqs = {
             requirement.id: requirement.text
             for requirement in extracted_spec.functional_requirements
         }
 
-        new_implementations = []
-        all_live_requirements = self._requirement_repo.list_latest_active_for_spec(spec_id=db_spec.id)
+        all_live_requirements = self._requirement_repo.list_latest_active_for_spec(
+            spec_id=db_spec.id
+        )
 
         for functional_requirement in extracted_spec.functional_requirements:
             if functional_requirement.id is None:
-                logger.warning("functional_requirement.id is None for functional_requirement=%s", functional_requirement)
                 continue
 
             db_requirement = self._requirement_repo.get_by_spec_and_paper_id(
@@ -53,73 +53,45 @@ class RequirementMerge:
 
             # If there is no requirement in the db then its new.
             if db_requirement is None:
-                logger.info("Adding new requirement to db for functional_requirement=%s", functional_requirement)
                 db_requirement = self._requirement_repo.add(
                     spec_id=db_spec.id,
                     paper_id=functional_requirement.id,
                 )
+                
+            # If there is a requirement in the db then we need to check if it has been changed.
+            latest_version = self._requirement_version_repo.get_latest_for_requirement(
+                requirement_id=db_requirement.id
+            )
 
-                logger.info("Adding new requirement version to db for functional_requirement=%s", functional_requirement)
-                # Create a new version for the new requirement.
-                rv = self._requirement_version_repo.add(
+            # We dont just create new versions for each new commit blindly. For requirements we 
+            # we track new, updated and inactive versions (they can stay the same across commits).
+            if latest_version is None:
+                self._requirement_version_repo.add(
                     requirement_id=db_requirement.id,
-                    commit_id=commit.commit_sha,
+                    commit_sha=commit.commit_sha,
                     commit_datetime=commit.commit_datetime,
                     requirement_text=functional_requirement.text,
                     filepath_globs=functional_requirement.path_globs,
                     status=VersionStatus.ACTIVE.value,
                 )
-
-                new_implementations += self.get_implementation_pairs(
-                    rv_id=rv.id,
-                    commit=commit,
-                    globs=functional_requirement.path_globs,
-                )
-                logger.info("New implementations for functional_requirement=%s: %s", functional_requirement, new_implementations)
-            else:
-                # If there is a requirement in the db then we need to check if it has been changed.
-                latest_version = self._requirement_version_repo.get_latest_for_requirement(
-                    requirement_id=db_requirement.id
+            elif latest_version.requirement_text != functional_requirement.text:
+                self._requirement_version_repo.add(
+                    requirement_id=db_requirement.id,
+                    commit_sha=commit.commit_sha,
+                    commit_datetime=commit.commit_datetime,
+                    requirement_text=functional_requirement.text,
+                    filepath_globs=functional_requirement.path_globs,
+                    status=VersionStatus.UPDATED.value,
                 )
 
-                logger.info("Latest version for functional_requirement=%s: %s", functional_requirement, latest_version)
-
-                if latest_version is not None and latest_version.requirement_text != functional_requirement.text:
-                    logger.info("Updating requirement version for functional_requirement=%s", functional_requirement)
-                    rv = self._requirement_version_repo.add(
-                        requirement_id=db_requirement.id,
-                        commit_id=commit.commit_sha,
-                        commit_datetime=commit.commit_datetime,
-                        requirement_text=functional_requirement.text,
-                        filepath_globs=functional_requirement.path_globs,
-                        status=VersionStatus.UPDATED.value,
-                    )
-
-                    new_implementations += self.get_implementation_pairs(
-                        rv_id=rv.id,
-                        commit=commit,
-                        globs=functional_requirement.path_globs,
-                    )
-
-        # Now for every requirement in the db that isnt in the extracted spec then it is inactive.
+        # Now for every requirement in the db that isnt in the extracted spec mark as inactive.
         for live_requirement in all_live_requirements:
             if live_requirement.paper_id not in updated_spec_reqs:
-                logger.info("Marking requirement as inactive for functional_requirement=%s", live_requirement)
                 self._requirement_version_repo.add(
                     requirement_id=live_requirement.id,
-                    commit_id=commit.commit_sha,
+                    commit_sha=commit.commit_sha,
                     commit_datetime=commit.commit_datetime,
                     requirement_text="",
                     filepath_globs=[],
                     status=VersionStatus.INACTIVE.value,
                 )
-        
-        return new_implementations
-            
-    def get_implementation_pairs(self, *, rv_id: int, commit: CommitContext, globs: list[str]) -> list[tuple[int, str]]:
-        """Get the implementation pairs for a given commit and globs."""
-        return [
-            (rv_id, file) 
-            for file 
-            in self._tree_scan.scan_tree(commit=commit, globs=globs)
-        ]

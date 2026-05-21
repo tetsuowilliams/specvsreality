@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, Query
 from specvsreality_api.facades.gantt_chart_facade import GanttChartFacade, get_gantt_chart_facade
 from specvsreality_api.schemas.gantt import GanttChartResponse
 from specvsreality_api.schemas.requirement_latest_version import RequirementLatestVersionResponse
+from specvsreality_api.schemas.requirement_version_tree import RequirementVersionTreeResponse
 
 router = APIRouter(tags=["gantt"])
 
@@ -27,6 +28,22 @@ async def get_requirement_latest_version(
     ] = None,
 ) -> RequirementLatestVersionResponse:
     return facade.get_requirement_latest_version(repo_id, spec_id, requirement_id=requirement_id)
+
+
+@router.get(
+    "/repos/{repo_id}/specs/{spec_id}/requirements/version-tree",
+    response_model=RequirementVersionTreeResponse,
+)
+async def get_requirement_version_tree(
+    repo_id: int,
+    spec_id: int,
+    facade: Annotated[GanttChartFacade, Depends(get_gantt_chart_facade)],
+    requirement_id: Annotated[
+        int | None,
+        Query(description="Requirement row id; required when the spec has more than one requirement."),
+    ] = None,
+) -> RequirementVersionTreeResponse:
+    return facade.get_requirement_version_tree(repo_id, spec_id, requirement_id=requirement_id)
 
 
 @router.get(

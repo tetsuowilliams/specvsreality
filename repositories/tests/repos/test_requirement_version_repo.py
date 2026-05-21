@@ -21,7 +21,7 @@ def test_get_by_id_returns_row_after_add(db_session: Session, git_repo_id: int) 
     repo = create_requirement_version_repo(db_session)
     row = repo.add(
         requirement_id=req.id,
-        commit_id="a" * 40,
+        commit_sha="a" * 40,
         commit_datetime=ts,
         requirement_text="text",
         filepath_globs=["*.py"],
@@ -50,7 +50,7 @@ def test_get_latest_for_requirement_returns_newest_by_commit_then_id(
 
     rv_old = repo.add(
         requirement_id=req.id,
-        commit_id="a" * 40,
+        commit_sha="a" * 40,
         commit_datetime=ts,
         requirement_text="v1",
         filepath_globs=[],
@@ -58,7 +58,7 @@ def test_get_latest_for_requirement_returns_newest_by_commit_then_id(
     )
     rv_new = repo.add(
         requirement_id=req.id,
-        commit_id="b" * 40,
+        commit_sha="b" * 40,
         commit_datetime=ts + timedelta(seconds=5),
         requirement_text="v2",
         filepath_globs=[],
@@ -73,7 +73,7 @@ def test_get_latest_for_requirement_returns_newest_by_commit_then_id(
     # Same commit time: higher id wins
     rv_tie_b = repo.add(
         requirement_id=req.id,
-        commit_id="c" * 40,
+        commit_sha="c" * 40,
         commit_datetime=rv_new.commit_datetime,
         requirement_text="tie-b",
         filepath_globs=[],
@@ -81,7 +81,7 @@ def test_get_latest_for_requirement_returns_newest_by_commit_then_id(
     )
     rv_tie_a = repo.add(
         requirement_id=req.id,
-        commit_id="d" * 40,
+        commit_sha="d" * 40,
         commit_datetime=rv_new.commit_datetime,
         requirement_text="tie-a",
         filepath_globs=[],
@@ -91,6 +91,42 @@ def test_get_latest_for_requirement_returns_newest_by_commit_then_id(
     latest2 = repo.get_latest_for_requirement(requirement_id=req.id)
     assert latest2 is not None
     assert latest2.id == rv_tie_a.id
+
+
+def test_update_evaluation_persists_justification_fields(
+    db_session: Session,
+    git_repo_id: int,
+) -> None:
+    spec = create_spec_repo(db_session).add(paper_id="0001-eval", repo_id=git_repo_id)
+    req = create_requirement_repo(db_session).add(spec_id=spec.id, paper_id="r")
+    ts = datetime.now(UTC)
+    repo = create_requirement_version_repo(db_session)
+    row = repo.add(
+        requirement_id=req.id,
+        commit_sha="a" * 40,
+        commit_datetime=ts,
+        requirement_text="text",
+        filepath_globs=["*.py"],
+        status=VersionStatus.ACTIVE.value,
+    )
+
+    updated = repo.update_evaluation(
+        requirement_version_id=row.id,
+        implemented=True,
+        summary="Implemented in src/main.py",
+        gaps=[],
+    )
+
+    assert updated is not None
+    assert updated.implemented is True
+    assert updated.summary == "Implemented in src/main.py"
+    assert updated.gaps == []
+
+    loaded = repo.get_by_id(row.id)
+    assert loaded is not None
+    assert loaded.implemented is True
+    assert loaded.summary == "Implemented in src/main.py"
+    assert loaded.gaps == []
 
 
 def test_list_latest_without_spec_id_includes_requirements_across_specs(
@@ -106,7 +142,7 @@ def test_list_latest_without_spec_id_includes_requirements_across_specs(
     r1 = req_repo.add(spec_id=spec1.id, paper_id="p1")
     rv1 = rv_repo.add(
         requirement_id=r1.id,
-        commit_id="a" * 40,
+        commit_sha="a" * 40,
         commit_datetime=ts,
         requirement_text="one",
         filepath_globs=[],
@@ -115,7 +151,7 @@ def test_list_latest_without_spec_id_includes_requirements_across_specs(
     r2 = req_repo.add(spec_id=spec2.id, paper_id="p2")
     rv2 = rv_repo.add(
         requirement_id=r2.id,
-        commit_id="b" * 40,
+        commit_sha="b" * 40,
         commit_datetime=ts,
         requirement_text="two",
         filepath_globs=[],

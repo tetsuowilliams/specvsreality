@@ -15,7 +15,7 @@ def test_add_and_get_by_id(db_session: Session) -> None:
     repo = create_artifact_version_repo(db_session)
     row = repo.add(
         artifact_id=art.id,
-        commit_id="a" * 40,
+        commit_sha="a" * 40,
         commit_datetime=ts,
         status="active",
         file_content="x",

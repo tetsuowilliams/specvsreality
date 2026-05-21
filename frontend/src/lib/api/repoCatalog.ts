@@ -35,10 +35,18 @@ export type SpecDetailVersionItem = {
 	plan_md: string | null;
 };
 
+export type SpecRequirementStatusItem = {
+	id: number;
+	paper_id: string;
+	has_version: boolean;
+	implemented: boolean | null;
+};
+
 export type SpecDetailResponse = {
 	id: number;
 	paper_id: string;
 	versions: SpecDetailVersionItem[];
+	requirements: SpecRequirementStatusItem[];
 };
 
 export async function fetchSpecDetail(
@@ -93,9 +101,60 @@ export async function fetchGanttChart(
 export type RequirementLatestVersionResponse = {
 	paper_id: string;
 	requirement_text: string;
-	commit_id: string;
+	commit_sha: string;
 	commit_datetime: string;
 };
+
+export type ImplementsEvidenceItem = {
+	evidence_file: string | null;
+	evidence_line_number: number | null;
+	evidence_snippet: string | null;
+	evidence_relevance: string | null;
+};
+
+export type RequirementTreeArtifactVersion = {
+	artifact_version_id: number;
+	filepath: string;
+	commit_sha: string;
+	commit_datetime: string;
+	status: string;
+	file_content: string;
+	evidence: ImplementsEvidenceItem;
+};
+
+export type RequirementTreeVersion = {
+	id: number;
+	commit_sha: string;
+	commit_datetime: string;
+	requirement_text: string;
+	filepath_globs: string[];
+	status: string;
+	implemented: boolean | null;
+	summary: string | null;
+	gaps: string[] | null;
+	artifact_versions: RequirementTreeArtifactVersion[];
+};
+
+export type RequirementVersionTreeResponse = {
+	paper_id: string;
+	versions: RequirementTreeVersion[];
+};
+
+export async function fetchRequirementVersionTree(
+	repoId: string | number,
+	specId: string | number,
+	options?: { requirementId?: string | number | null }
+): Promise<RequirementVersionTreeResponse> {
+	const rid = options?.requirementId;
+	const q =
+		rid !== undefined && rid !== null && String(rid).length > 0
+			? `?requirement_id=${encodeURIComponent(String(rid))}`
+			: '';
+	const res = await fetch(
+		`${publicApiBaseUrl()}/repos/${repoId}/specs/${specId}/requirements/version-tree${q}`
+	);
+	return readJson(res);
+}
 
 export async function fetchRequirementLatestVersion(
 	repoId: string | number,

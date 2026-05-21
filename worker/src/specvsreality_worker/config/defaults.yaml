@@ -6,5 +6,8 @@ port: 5672
 virtual_host: /
 queue_name: messages
 prefetch_count: 1
+heartbeat: 1800
+blocked_connection_timeout: 0
+reconnect_delay_seconds: 5
 username: guest
 password: ""

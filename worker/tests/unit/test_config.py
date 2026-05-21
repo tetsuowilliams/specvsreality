@@ -18,6 +18,7 @@ def test_load_settings_reads_packaged_defaults(monkeypatch: pytest.MonkeyPatch) 
     assert s.port == 5672
     assert s.queue_name == "messages"
     assert s.prefetch_count == 1
+    assert s.heartbeat == 1800
 
 
 def test_env_overrides_yaml(monkeypatch: pytest.MonkeyPatch) -> None:

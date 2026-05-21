@@ -30,20 +30,34 @@ from specvsreality_repositories.repos import (
 from specvsreality_worker.agents.implements_agent import create_implements_evaluation_agent
 from specvsreality_worker.agents.spec_extraction_agent import create_spec_extraction_agent
 from specvsreality_worker.core import ArtifactMerge, CommitWalker, RequirementMerge, SpecMerge, TreeScan
+from specvsreality_worker.core.evaluation import Evaluation
+from specvsreality_worker.core.spec_detection import SpecDetection
 from specvsreality_worker.git_adapter import GitAdapter, GitAdapterError
 from specvsreality_worker.handlers.protocol import MessageHandler
 
 logger = logging.getLogger(__name__)
 
-CommitWalkerFactory = Callable[[GitAdapter, int, SpecMerge], CommitWalker]
+CommitWalkerFactory = Callable[[GitAdapter, int, Session], CommitWalker]
 SpecMergeFactory = Callable[[Session, GitAdapter], SpecMerge]
 
 
 def _build_spec_merge(session: Session, adapter: GitAdapter) -> SpecMerge:
     tree_scan = TreeScan(git_adapter=adapter)
+    spec_detection = SpecDetection()
     requirement_repo = create_requirement_repo(session)
     requirement_version_repo = create_requirement_version_repo(session)
     implements_agent = create_implements_evaluation_agent()
+    artifact_merge = ArtifactMerge(
+        tree_scan=tree_scan,
+        git_adapter=adapter,
+        artifact_repo=create_artifact_repo(session),
+        artifact_version_repo=create_artifact_version_repo(session),
+        requirement_repo=requirement_repo,
+        requirement_version_repo=requirement_version_repo,
+        implements_repo=create_implements_repo(session),
+        implements_evaluation_agent=implements_agent,
+        spec_detection=spec_detection,
+    )
     return SpecMerge(
         spec_repo=create_spec_repo(session),
         spec_version_repo=create_spec_version_repo(session),
@@ -53,19 +67,33 @@ def _build_spec_merge(session: Session, adapter: GitAdapter) -> SpecMerge:
             requirement_version_repo=requirement_version_repo,
             tree_scan=tree_scan,
         ),
-        artifact_merge=ArtifactMerge(
-            tree_scan=tree_scan,
-            git_adapter=adapter,
-            artifact_repo=create_artifact_repo(session),
-            artifact_version_repo=create_artifact_version_repo(session),
-            requirement_repo=requirement_repo,
-            requirement_version_repo=requirement_version_repo,
-            implements_repo=create_implements_repo(session),
-            implements_evaluation_agent=implements_agent,
-        ),
+        artifact_merge=artifact_merge,
         spec_extraction_agent=create_spec_extraction_agent(),
         implements_evaluation_agent=implements_agent,
         git_adapter=adapter,
+        spec_detection=spec_detection,
+    )
+
+
+def _build_commit_walker(adapter: GitAdapter, repo_id: int, session: Session) -> CommitWalker:
+    spec_merge = _build_spec_merge(session, adapter)
+    evaluation = Evaluation(
+        spec_repo=create_spec_repo(session),
+        spec_version_repo=create_spec_version_repo(session),
+        requirement_repo=create_requirement_repo(session),
+        requirement_version_repo=create_requirement_version_repo(session),
+        artifact_repo=create_artifact_repo(session),
+        artifact_version_repo=create_artifact_version_repo(session),
+        implements_repo=create_implements_repo(session),
+        implements_evaluation_agent=create_implements_evaluation_agent(),
+        git_adapter=adapter,
+    )
+    return CommitWalker(
+        adapter,
+        repo_id,
+        spec_merge,
+        spec_merge._artifact_merge,
+        evaluation,
     )
 
 
@@ -107,7 +135,7 @@ class ScanRepoHandler(MessageHandler):
         clone_root: str | Path | None = None,
         *,
         spec_merge_factory: SpecMergeFactory = _build_spec_merge,
-        commit_walker_factory: CommitWalkerFactory = CommitWalker,
+        commit_walker_factory: CommitWalkerFactory = _build_commit_walker,
     ) -> None:
         self._clone_root = Path(clone_root or os.getenv("REPO_CLONE_ROOT", "/repos")).resolve()
         self._clone_root.mkdir(parents=True, exist_ok=True)
@@ -164,8 +192,7 @@ class ScanRepoHandler(MessageHandler):
                 first_sha[:7],
             )
 
-            spec_merge = self._spec_merge_factory(session, adapter)
-            walker = self._commit_walker_factory(adapter, repo_id, spec_merge)
+            walker = self._commit_walker_factory(adapter, repo_id, session)
 
             for commit_sha in adapter.iter_commits_since(first_sha):
                 session.refresh(repo_row)

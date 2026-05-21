@@ -5,9 +5,8 @@ import os
 import opik
 from pydantic_ai import Agent
 
+from specvsreality_worker.agents.pydantic_ai_verbose import build_event_stream_handler
 from specvsreality_worker.agents.spec_extraction_agent.models import SpecExtractionResult
-from specvsreality_worker.observability import pydantic_ai_otlp_enabled
-
 _OPIK_PROJECT = "specvsreality-worker"
 
 
@@ -16,7 +15,6 @@ class SpecExtractionAgent:
         self._agent = Agent(
             model=model,
             output_type=SpecExtractionResult,
-            instrument=pydantic_ai_otlp_enabled,
             system_prompt=(
                 "Extract structured software specification information from markdown files. "
                 "Return a concise title, all functional requirements, and user acceptance scenarios. "
@@ -60,7 +58,10 @@ class SpecExtractionAgent:
             f"{plan_md or ''}\n"
             "</plan.md>\n"
         )
-        return self._agent.run_sync(prompt).output
+        return self._agent.run_sync(
+            prompt,
+            event_stream_handler=build_event_stream_handler(),
+        ).output
 
 
 def create_spec_extraction_agent() -> SpecExtractionAgent:

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlalchemy import ForeignKey, Integer
+from sqlalchemy import ForeignKey, Integer, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from specvsreality_repositories.models.base import Base
@@ -23,3 +23,7 @@ class Implements(Base):
         ForeignKey("artifact_version.id", ondelete="CASCADE"),
         primary_key=True,
     )
+    evidence_file: Mapped[str | None] = mapped_column(Text, nullable=True)
+    evidence_line_number: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    evidence_snippet: Mapped[str | None] = mapped_column(Text, nullable=True)
+    evidence_relevance: Mapped[str | None] = mapped_column(Text, nullable=True)
