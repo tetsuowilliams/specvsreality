@@ -15,7 +15,12 @@
  * Docs mirror: https://anovokmet.github.io/svelte-gantt/docs/options/gantt (when available);
  * source of truth: package README + `types/gantt.d.ts`.
  */
-import type { GanttChartResponse, GanttHistorySegment } from '$lib/api/repoCatalog';
+import type {
+	GanttChartResponse,
+	GanttHistorySegment,
+	RequirementVersionTreeResponse
+} from '$lib/api/repoCatalog';
+import { artifactSegmentTooltip, requirementSegmentTooltips } from '$lib/gantt/ganttTaskTooltips';
 
 /** Mirrors svelte-gantt `RowModel`. */
 export type GanttRowModel = {
@@ -32,6 +37,8 @@ export type GanttTaskModel = {
 	from: number;
 	to: number;
 	label?: string;
+	/** Hover tooltip (wired via {@link GanttChart} taskElementHook). */
+	tooltip?: string;
 	classes?: string;
 	draggable?: boolean;
 	resizable?: boolean;
@@ -125,16 +132,21 @@ function segmentLabel(seg: GanttHistorySegment): string {
 	return `${seg.status} (${short(seg.start)} → ${short(seg.end)})${commit}`;
 }
 
-function mapRequirementSegments(block: GanttChartResponse['requirement']): GanttTaskModel[] {
+function mapRequirementSegments(
+	block: GanttChartResponse['requirement'],
+	tooltips: (string | null)[] | null
+): GanttTaskModel[] {
 	return block.history.map((seg, i) => {
 		const from = parseMs(seg.start);
 		const to = parseMs(seg.end);
 		const safeTo = Number.isFinite(to) && Number.isFinite(from) && to <= from ? from + 60000 : to;
+		const tooltip = tooltips?.[i] ?? undefined;
 		return {
 			id: `req:${block.paper_id}:${i}:${from}:${safeTo}`,
 			resourceId: REQUIREMENT_ROW_ID,
 			from: Number.isFinite(from) ? from : Date.now(),
 			to: Number.isFinite(safeTo) ? safeTo : Date.now() + 60000,
+			...(tooltip ? { tooltip } : {}),
 			classes: statusTaskClasses(seg.status),
 			draggable: false,
 			resizable: false
@@ -144,18 +156,24 @@ function mapRequirementSegments(block: GanttChartResponse['requirement']): Gantt
 
 function mapArtifactSegments(
 	block: GanttChartResponse['artifacts'][number],
-	artifactIndex: number
+	artifactIndex: number,
+	versionTree: RequirementVersionTreeResponse | null
 ): GanttTaskModel[] {
 	const rid = artifactRowId(artifactIndex);
 	return block.history.map((seg, i) => {
 		const from = parseMs(seg.start);
 		const to = parseMs(seg.end);
 		const safeTo = Number.isFinite(to) && Number.isFinite(from) && to <= from ? from + 60000 : to;
+		const tooltip =
+			versionTree != null
+				? (artifactSegmentTooltip(block.filepath, seg, versionTree) ?? undefined)
+				: undefined;
 		return {
 			id: `art:${artifactIndex}:${i}:${from}:${safeTo}`,
 			resourceId: rid,
 			from: Number.isFinite(from) ? from : Date.now(),
 			to: Number.isFinite(safeTo) ? safeTo : Date.now() + 60000,
+			...(tooltip ? { tooltip } : {}),
 			classes: statusTaskClasses(seg.status),
 			draggable: false,
 			resizable: false
@@ -163,8 +181,13 @@ function mapArtifactSegments(
 	});
 }
 
-export function mapGanttApiToRowsAndTasks(chart: GanttChartResponse): MappedGanttRowsTasks {
+export function mapGanttApiToRowsAndTasks(
+	chart: GanttChartResponse,
+	versionTree?: RequirementVersionTreeResponse | null
+): MappedGanttRowsTasks {
 	const bounds = collectGlobalBounds(chart);
+	const rvTooltips =
+		versionTree != null ? requirementSegmentTooltips(chart, versionTree) : null;
 
 	const rows: GanttRowModel[] = [
 		{
@@ -174,7 +197,7 @@ export function mapGanttApiToRowsAndTasks(chart: GanttChartResponse): MappedGant
 			resizable: false
 		}
 	];
-	const tasks: GanttTaskModel[] = [...mapRequirementSegments(chart.requirement)];
+	const tasks: GanttTaskModel[] = [...mapRequirementSegments(chart.requirement, rvTooltips)];
 
 	for (let i = 0; i < chart.artifacts.length; i++) {
 		const a = chart.artifacts[i]!;
@@ -184,7 +207,7 @@ export function mapGanttApiToRowsAndTasks(chart: GanttChartResponse): MappedGant
 			draggable: false,
 			resizable: false
 		});
-		tasks.push(...mapArtifactSegments(a, i));
+		tasks.push(...mapArtifactSegments(a, i, versionTree ?? null));
 	}
 
 	return { rows, tasks, bounds };
@@ -274,6 +297,8 @@ export type BuildGanttOptionsParams = {
 	 * spans **all** rows (see README); use only if you want that global overlay in addition to tasks.
 	 */
 	includeSegmentTimeRanges?: boolean;
+	/** Joins evaluation summary / implements evidence onto segment tooltips. */
+	versionTree?: RequirementVersionTreeResponse | null;
 };
 
 /**
@@ -284,7 +309,7 @@ export function buildSvelteGanttChartOptions(
 	chart: GanttChartResponse,
 	params: BuildGanttOptionsParams = {}
 ): SvelteGanttChartOptions {
-	const { rows, tasks, bounds } = mapGanttApiToRowsAndTasks(chart);
+	const { rows, tasks, bounds } = mapGanttApiToRowsAndTasks(chart, params.versionTree);
 	const preset = columnPresetForBounds(bounds);
 	const { magnetUnit, magnetOffset } = magnetForPreset(preset);
 	return {

@@ -12,6 +12,7 @@ from specvsreality_repositories.repos import (
     create_artifact_version_repo,
     create_gantt_data_repo,
     create_git_repo_repo,
+    create_implementation_at_commit_repo,
     create_implements_repo,
     create_requirement_repo,
     create_requirement_version_repo,
@@ -83,15 +84,22 @@ def test_list_implements_with_artifact_versions(db_session: Session, git_row_id:
         status="active",
         file_content="x",
     )
-    create_implements_repo(db_session).add(
+    iac = create_implementation_at_commit_repo(db_session).upsert_evaluation(
         requirement_version_id=rv.id,
+        evaluation_commit_sha=rv.commit_sha,
+        implemented=True,
+        summary="ok",
+        gaps=[],
+    )
+    create_implements_repo(db_session).add(
+        implementation_at_commit_id=iac.id,
         artifact_version_id=av.id,
     )
     repo = create_gantt_data_repo(db_session)
     rows = repo.list_implements_with_artifact_versions(requirement_version_ids=[rv.id])
     assert len(rows) == 1
-    impl, av2, art2 = rows[0]
-    assert impl.requirement_version_id == rv.id
+    impl, iac_row, av2, art2 = rows[0]
+    assert iac_row.requirement_version_id == rv.id
     assert impl.artifact_version_id == av.id
     assert av2.id == av.id
     assert art2.filepath == "src/x.py"

@@ -11,6 +11,7 @@ from specvsreality_repositories.repos import (
     create_artifact_repo,
     create_artifact_version_repo,
     create_git_repo_repo,
+    create_implementation_at_commit_repo,
     create_implements_repo,
     create_requirement_repo,
     create_requirement_version_repo,
@@ -62,12 +63,19 @@ def test_spec_graph_round_trip(db_session: Session, git_row_id: int) -> None:
         status="present",
         file_content="x = 1",
     )
-    impl = create_implements_repo(db_session).add(
+    iac = create_implementation_at_commit_repo(db_session).upsert_evaluation(
         requirement_version_id=rv.id,
+        evaluation_commit_sha=rv.commit_sha,
+        implemented=True,
+        summary="ok",
+        gaps=[],
+    )
+    impl = create_implements_repo(db_session).add(
+        implementation_at_commit_id=iac.id,
         artifact_version_id=av.id,
     )
 
-    assert impl.requirement_version_id == rv.id
+    assert impl.implementation_at_commit_id == iac.id
     assert impl.artifact_version_id == av.id
     assert create_spec_repo(db_session).get_by_id(spec.id) is not None
 
@@ -216,8 +224,22 @@ def test_requirement_version_repo_get_for_artifact_filepath(db_session: Session,
         status="present",
         file_content="x = 1",
     )
-    implements_repo.add(requirement_version_id=rv_a.id, artifact_version_id=av.id)
-    implements_repo.add(requirement_version_id=rv_b.id, artifact_version_id=av.id)
+    iac_a = create_implementation_at_commit_repo(db_session).upsert_evaluation(
+        requirement_version_id=rv_a.id,
+        evaluation_commit_sha=rv_a.commit_sha,
+        implemented=True,
+        summary="",
+        gaps=[],
+    )
+    iac_b = create_implementation_at_commit_repo(db_session).upsert_evaluation(
+        requirement_version_id=rv_b.id,
+        evaluation_commit_sha=rv_b.commit_sha,
+        implemented=True,
+        summary="",
+        gaps=[],
+    )
+    implements_repo.add(implementation_at_commit_id=iac_a.id, artifact_version_id=av.id)
+    implements_repo.add(implementation_at_commit_id=iac_b.id, artifact_version_id=av.id)
 
     matches = requirement_version_repo.get_for_artifact_filepath(filepath=target_path, spec_id=spec.id)
     assert len(matches) == 2
@@ -241,7 +263,14 @@ def test_requirement_version_repo_get_for_artifact_filepath(db_session: Session,
         status="present",
         file_content="y = 2",
     )
-    implements_repo.add(requirement_version_id=rv_other.id, artifact_version_id=av_other.id)
+    iac_other = create_implementation_at_commit_repo(db_session).upsert_evaluation(
+        requirement_version_id=rv_other.id,
+        evaluation_commit_sha=rv_other.commit_sha,
+        implemented=True,
+        summary="",
+        gaps=[],
+    )
+    implements_repo.add(implementation_at_commit_id=iac_other.id, artifact_version_id=av_other.id)
 
     scoped = requirement_version_repo.get_for_artifact_filepath(filepath=target_path, spec_id=spec.id)
     assert len(scoped) == 2

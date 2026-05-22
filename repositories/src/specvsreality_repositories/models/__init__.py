@@ -4,6 +4,7 @@ from specvsreality_repositories.models.artifact import Artifact
 from specvsreality_repositories.models.artifact_version import ArtifactVersion
 from specvsreality_repositories.models.base import Base
 from specvsreality_repositories.models.git_repo import GitRepo
+from specvsreality_repositories.models.implementation_at_commit import ImplementationAtCommit
 from specvsreality_repositories.models.implements import Implements
 from specvsreality_repositories.models.requirement import Requirement
 from specvsreality_repositories.models.requirement_version import RequirementVersion
@@ -15,6 +16,7 @@ __all__ = [
     "ArtifactVersion",
     "Base",
     "GitRepo",
+    "ImplementationAtCommit",
     "Implements",
     "Requirement",
     "RequirementVersion",

@@ -11,7 +11,7 @@ from specvsreality_worker.core.commit_context import CommitContext
 from specvsreality_worker.core.evaluation import Evaluation
 
 
-def test_persist_justification_updates_requirement_version_and_implements() -> None:
+def test_persist_justification_updates_implementation_at_commit_and_implements() -> None:
     requirement_version = MagicMock()
     requirement_version.id = 10
     requirement_version.requirement_id = 5
@@ -45,6 +45,9 @@ def test_persist_justification_updates_requirement_version_and_implements() -> N
     artifact_version = MagicMock()
     artifact_version.id = 99
 
+    implementation_at_commit = MagicMock()
+    implementation_at_commit.id = 55
+
     requirement_version_repo = MagicMock()
     requirement_version_repo.get_versions_at_commit.return_value = [requirement_version]
     requirement_repo = MagicMock()
@@ -53,21 +56,22 @@ def test_persist_justification_updates_requirement_version_and_implements() -> N
     spec_version_repo.get_for_spec_at_commit.return_value = spec_version
     implements_evaluation_agent = MagicMock()
     implements_evaluation_agent.evaluate.return_value = justification
+    implementation_at_commit_repo = MagicMock()
+    implementation_at_commit_repo.upsert_evaluation.return_value = implementation_at_commit
     implements_repo = MagicMock()
     artifact_version_repo = MagicMock()
-    artifact_version_repo.get_by_filepath_and_commit.return_value = artifact_version
-    git_adapter = MagicMock()
+    artifact_version_repo.get_latest_for_artifact_filepath.return_value = artifact_version
 
     evaluation = Evaluation(
         spec_repo=MagicMock(),
         spec_version_repo=spec_version_repo,
         requirement_repo=requirement_repo,
         requirement_version_repo=requirement_version_repo,
-        artifact_repo=MagicMock(),
         artifact_version_repo=artifact_version_repo,
+        implementation_at_commit_repo=implementation_at_commit_repo,
         implements_repo=implements_repo,
         implements_evaluation_agent=implements_evaluation_agent,
-        git_adapter=git_adapter,
+        git_adapter=MagicMock(),
     )
 
     commit = CommitContext(
@@ -77,21 +81,25 @@ def test_persist_justification_updates_requirement_version_and_implements() -> N
     )
     evaluation.evaluate_commit(commit=commit)
 
-    requirement_version_repo.update_evaluation.assert_called_once_with(
+    artifact_version_repo.get_latest_for_artifact_filepath.assert_called_once_with(
+        filepath="src/main.py",
+    )
+    implementation_at_commit_repo.upsert_evaluation.assert_called_once_with(
         requirement_version_id=10,
+        evaluation_commit_sha="a" * 40,
         implemented=True,
         summary="Greeting implemented.",
         gaps=[],
+        confidence="high",
     )
     implements_repo.upsert_evidence.assert_called_once_with(
-        requirement_version_id=10,
+        implementation_at_commit_id=55,
         artifact_version_id=99,
         evidence_file="src/main.py",
         evidence_line_number=1,
         evidence_snippet="def hello(): pass",
         evidence_relevance="Provides greeting.",
     )
-    git_adapter.file_at_commit_or_none.assert_not_called()
 
 
 def test_evaluate_commit_passes_shared_tool_cache() -> None:
@@ -145,8 +153,8 @@ def test_evaluate_commit_passes_shared_tool_cache() -> None:
         spec_version_repo=spec_version_repo,
         requirement_repo=requirement_repo,
         requirement_version_repo=requirement_version_repo,
-        artifact_repo=MagicMock(),
         artifact_version_repo=MagicMock(),
+        implementation_at_commit_repo=MagicMock(),
         implements_repo=MagicMock(),
         implements_evaluation_agent=implements_evaluation_agent,
         git_adapter=MagicMock(),
@@ -166,7 +174,7 @@ def test_evaluate_commit_passes_shared_tool_cache() -> None:
     assert first_cache is second_cache
 
 
-def test_persist_justification_creates_artifact_version_when_missing() -> None:
+def test_persist_justification_skips_evidence_when_no_artifact_version() -> None:
     requirement_version = MagicMock()
     requirement_version.id = 10
     requirement_version.requirement_id = 5
@@ -197,10 +205,8 @@ def test_persist_justification_creates_artifact_version_when_missing() -> None:
         gaps=[],
     )
 
-    artifact = MagicMock()
-    artifact.id = 7
-    created_version = MagicMock()
-    created_version.id = 42
+    implementation_at_commit = MagicMock()
+    implementation_at_commit.id = 55
 
     requirement_version_repo = MagicMock()
     requirement_version_repo.get_versions_at_commit.return_value = [requirement_version]
@@ -210,26 +216,22 @@ def test_persist_justification_creates_artifact_version_when_missing() -> None:
     spec_version_repo.get_for_spec_at_commit.return_value = spec_version
     implements_evaluation_agent = MagicMock()
     implements_evaluation_agent.evaluate.return_value = justification
+    implementation_at_commit_repo = MagicMock()
+    implementation_at_commit_repo.upsert_evaluation.return_value = implementation_at_commit
     implements_repo = MagicMock()
     artifact_version_repo = MagicMock()
-    artifact_version_repo.get_by_filepath_and_commit.return_value = None
     artifact_version_repo.get_latest_for_artifact_filepath.return_value = None
-    artifact_version_repo.add.return_value = created_version
-    artifact_repo = MagicMock()
-    artifact_repo.get_by_filepath.return_value = artifact
-    git_adapter = MagicMock()
-    git_adapter.file_at_commit_or_none.return_value = "def hello(): pass"
 
     evaluation = Evaluation(
         spec_repo=MagicMock(),
         spec_version_repo=spec_version_repo,
         requirement_repo=requirement_repo,
         requirement_version_repo=requirement_version_repo,
-        artifact_repo=artifact_repo,
         artifact_version_repo=artifact_version_repo,
+        implementation_at_commit_repo=implementation_at_commit_repo,
         implements_repo=implements_repo,
         implements_evaluation_agent=implements_evaluation_agent,
-        git_adapter=git_adapter,
+        git_adapter=MagicMock(),
     )
 
     commit = CommitContext(
@@ -239,12 +241,5 @@ def test_persist_justification_creates_artifact_version_when_missing() -> None:
     )
     evaluation.evaluate_commit(commit=commit)
 
-    artifact_version_repo.add.assert_called_once()
-    implements_repo.upsert_evidence.assert_called_once_with(
-        requirement_version_id=10,
-        artifact_version_id=42,
-        evidence_file="src/main.py",
-        evidence_line_number=1,
-        evidence_snippet="def hello(): pass",
-        evidence_relevance="Provides greeting.",
-    )
+    implementation_at_commit_repo.upsert_evaluation.assert_called_once()
+    implements_repo.upsert_evidence.assert_not_called()

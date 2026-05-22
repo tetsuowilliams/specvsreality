@@ -3,6 +3,10 @@
 from specvsreality_repositories.repos.artifact_repo import ArtifactRepo, create_artifact_repo
 from specvsreality_repositories.repos.artifact_version_repo import ArtifactVersionRepo, create_artifact_version_repo
 from specvsreality_repositories.repos.git_repo_repo import GitRepoRepo, create_git_repo_repo
+from specvsreality_repositories.repos.implementation_at_commit_repo import (
+    ImplementationAtCommitRepo,
+    create_implementation_at_commit_repo,
+)
 from specvsreality_repositories.repos.implements_repo import ImplementsRepo, create_implements_repo
 from specvsreality_repositories.repos.requirement_repo import RequirementRepo, create_requirement_repo
 from specvsreality_repositories.repos.requirement_version_repo import (
@@ -19,6 +23,7 @@ __all__ = [
     "ArtifactRepo",
     "ArtifactVersionRepo",
     "GitRepoRepo",
+    "ImplementationAtCommitRepo",
     "ImplementsRepo",
     "RequirementRepo",
     "RequirementVersionRepo",
@@ -28,6 +33,7 @@ __all__ = [
     "create_artifact_repo",
     "create_artifact_version_repo",
     "create_git_repo_repo",
+    "create_implementation_at_commit_repo",
     "create_implements_repo",
     "create_requirement_repo",
     "create_requirement_version_repo",

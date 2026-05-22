@@ -93,42 +93,6 @@ def test_get_latest_for_requirement_returns_newest_by_commit_then_id(
     assert latest2.id == rv_tie_a.id
 
 
-def test_update_evaluation_persists_justification_fields(
-    db_session: Session,
-    git_repo_id: int,
-) -> None:
-    spec = create_spec_repo(db_session).add(paper_id="0001-eval", repo_id=git_repo_id)
-    req = create_requirement_repo(db_session).add(spec_id=spec.id, paper_id="r")
-    ts = datetime.now(UTC)
-    repo = create_requirement_version_repo(db_session)
-    row = repo.add(
-        requirement_id=req.id,
-        commit_sha="a" * 40,
-        commit_datetime=ts,
-        requirement_text="text",
-        filepath_globs=["*.py"],
-        status=VersionStatus.ACTIVE.value,
-    )
-
-    updated = repo.update_evaluation(
-        requirement_version_id=row.id,
-        implemented=True,
-        summary="Implemented in src/main.py",
-        gaps=[],
-    )
-
-    assert updated is not None
-    assert updated.implemented is True
-    assert updated.summary == "Implemented in src/main.py"
-    assert updated.gaps == []
-
-    loaded = repo.get_by_id(row.id)
-    assert loaded is not None
-    assert loaded.implemented is True
-    assert loaded.summary == "Implemented in src/main.py"
-    assert loaded.gaps == []
-
-
 def test_list_latest_without_spec_id_includes_requirements_across_specs(
     db_session: Session,
     git_repo_id: int,

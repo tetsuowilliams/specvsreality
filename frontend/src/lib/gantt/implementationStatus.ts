@@ -30,12 +30,12 @@ export const IMPLEMENTATION_STATUS_THEMES: Record<ImplementationDisplayStatus, I
 		},
 		not_implemented: {
 			label: 'Not implemented',
-			accent: '#d97706',
-			accentMuted: '#fef3c7',
-			pillBg: '#fde68a',
-			pillFg: '#78350f',
-			rowBg: '#fffbeb',
-			rowBorder: '#fcd34d'
+			accent: '#e11d48',
+			accentMuted: '#ffe4e6',
+			pillBg: '#fecaca',
+			pillFg: '#9f1239',
+			rowBg: '#fff1f2',
+			rowBorder: '#fda4af'
 		},
 		unevaluated: {
 			label: 'Not evaluated',

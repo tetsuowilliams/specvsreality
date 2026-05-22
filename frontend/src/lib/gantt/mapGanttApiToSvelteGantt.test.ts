@@ -8,7 +8,7 @@ import {
 	mapGanttApiToTimeRanges,
 	statusTaskClasses
 } from './mapGanttApiToSvelteGantt';
-import type { GanttChartResponse } from '$lib/api/repoCatalog';
+import type { GanttChartResponse, RequirementVersionTreeResponse } from '$lib/api/repoCatalog';
 
 const t0 = '2024-01-01T00:00:00.000Z';
 const t1 = '2024-01-02T00:00:00.000Z';
@@ -42,6 +42,60 @@ describe('mapGanttApiToRowsAndTasks', () => {
 		expect(bounds.from).toBeLessThan(bounds.to);
 		expect(tasks).toHaveLength(3);
 		expect(tasks.every((t) => t.draggable === false && t.resizable === false)).toBe(true);
+	});
+
+	it('attaches tooltips when version tree is provided', () => {
+		const chart = sampleChart();
+		const tree: RequirementVersionTreeResponse = {
+			paper_id: 'REQ-1',
+			versions: [
+				{
+					id: 2,
+					commit_sha: 'bbb',
+					commit_datetime: t1,
+					requirement_text: 'n',
+					filepath_globs: [],
+					status: 'active',
+					implemented: false,
+					summary: 'eval at t2',
+					gaps: null,
+					artifact_versions: [
+						{
+							artifact_version_id: 2,
+							filepath: 'src/foo.ts',
+							commit_sha: 'def5678',
+							commit_datetime: t0,
+							status: 'active',
+							file_content: '',
+							evidence: {
+								evidence_file: null,
+								evidence_line_number: null,
+								evidence_snippet: 'evidence text',
+								evidence_relevance: null
+							}
+						}
+					]
+				},
+				{
+					id: 1,
+					commit_sha: 'aaa',
+					commit_datetime: t0,
+					requirement_text: 'o',
+					filepath_globs: [],
+					status: 'active',
+					implemented: true,
+					summary: 'eval at t0',
+					gaps: null,
+					artifact_versions: []
+				}
+			]
+		};
+		const { tasks } = mapGanttApiToRowsAndTasks(chart, tree);
+		const reqTasks = tasks.filter((t) => t.resourceId === REQUIREMENT_ROW_ID);
+		expect(reqTasks[0]?.tooltip).toBe('eval at t0');
+		expect(reqTasks[1]?.tooltip).toBe('eval at t2');
+		const artTask = tasks.find((t) => t.resourceId === artifactRowId(0));
+		expect(artTask?.tooltip).toBe('evidence text');
 	});
 
 	it('assigns tasks to the correct resourceId', () => {

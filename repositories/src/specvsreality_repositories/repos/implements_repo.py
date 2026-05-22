@@ -16,33 +16,32 @@ class ImplementsRepo:
     def __init__(self, session: Session) -> None:
         self._session = session
 
-    def get_by_requirement_version_and_artifact_version(
+    def get_by_implementation_and_artifact_version(
         self,
         *,
-        requirement_version_id: int,
+        implementation_at_commit_id: int,
         artifact_version_id: int,
     ) -> Implements | None:
-        """Return the link row between this requirement version and artifact version, if present."""
         return self._session.get(
             Implements,
-            (requirement_version_id, artifact_version_id),
+            (implementation_at_commit_id, artifact_version_id),
         )
 
     def get(
         self,
         *,
-        requirement_version_id: int,
+        implementation_at_commit_id: int,
         artifact_version_id: int,
     ) -> Implements | None:
-        return self.get_by_requirement_version_and_artifact_version(
-            requirement_version_id=requirement_version_id,
+        return self.get_by_implementation_and_artifact_version(
+            implementation_at_commit_id=implementation_at_commit_id,
             artifact_version_id=artifact_version_id,
         )
 
-    def get_for_requirement_version_and_filepath(
+    def get_for_implementation_and_filepath(
         self,
         *,
-        requirement_version_id: int,
+        implementation_at_commit_id: int,
         filepath: str,
     ) -> Implements | None:
         normalized = filepath.replace("\\", "/")
@@ -51,16 +50,21 @@ class ImplementsRepo:
             .join(ArtifactVersion, ArtifactVersion.id == Implements.artifact_version_id)
             .join(Artifact, Artifact.id == ArtifactVersion.artifact_id)
             .where(
-                Implements.requirement_version_id == requirement_version_id,
+                Implements.implementation_at_commit_id == implementation_at_commit_id,
                 Artifact.filepath == normalized,
             )
             .limit(1)
         )
         return self._session.scalars(stmt).first()
 
-    def add(self, *, requirement_version_id: int, artifact_version_id: int) -> Implements:
+    def add(
+        self,
+        *,
+        implementation_at_commit_id: int,
+        artifact_version_id: int,
+    ) -> Implements:
         row = Implements(
-            requirement_version_id=requirement_version_id,
+            implementation_at_commit_id=implementation_at_commit_id,
             artifact_version_id=artifact_version_id,
         )
         self._session.add(row)
@@ -70,7 +74,7 @@ class ImplementsRepo:
     def update_evidence(
         self,
         *,
-        requirement_version_id: int,
+        implementation_at_commit_id: int,
         artifact_version_id: int,
         evidence_file: str,
         evidence_line_number: int | None,
@@ -78,7 +82,7 @@ class ImplementsRepo:
         evidence_relevance: str,
     ) -> Implements | None:
         row = self.get(
-            requirement_version_id=requirement_version_id,
+            implementation_at_commit_id=implementation_at_commit_id,
             artifact_version_id=artifact_version_id,
         )
         if row is None:
@@ -94,15 +98,15 @@ class ImplementsRepo:
     def update_evidence_for_filepath(
         self,
         *,
-        requirement_version_id: int,
+        implementation_at_commit_id: int,
         filepath: str,
         evidence_file: str,
         evidence_line_number: int | None,
         evidence_snippet: str,
         evidence_relevance: str,
     ) -> Implements | None:
-        row = self.get_for_requirement_version_and_filepath(
-            requirement_version_id=requirement_version_id,
+        row = self.get_for_implementation_and_filepath(
+            implementation_at_commit_id=implementation_at_commit_id,
             filepath=filepath,
         )
         if row is None:
@@ -118,21 +122,21 @@ class ImplementsRepo:
     def upsert_evidence(
         self,
         *,
-        requirement_version_id: int,
+        implementation_at_commit_id: int,
         artifact_version_id: int,
         evidence_file: str,
         evidence_line_number: int | None,
         evidence_snippet: str,
         evidence_relevance: str,
     ) -> Implements:
-        """Create or update the requirement–artifact link and attach evidence."""
+        """Create or update the implementation–artifact link and attach evidence."""
         row = self.get(
-            requirement_version_id=requirement_version_id,
+            implementation_at_commit_id=implementation_at_commit_id,
             artifact_version_id=artifact_version_id,
         )
         if row is None:
             row = Implements(
-                requirement_version_id=requirement_version_id,
+                implementation_at_commit_id=implementation_at_commit_id,
                 artifact_version_id=artifact_version_id,
             )
             self._session.add(row)

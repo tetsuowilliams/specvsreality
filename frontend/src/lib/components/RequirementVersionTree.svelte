@@ -1,5 +1,8 @@
 <script lang="ts">
-	import type { RequirementVersionTreeResponse } from '$lib/api/repoCatalog';
+	import type {
+		ImplementsEvidenceItem,
+		RequirementVersionTreeResponse
+	} from '$lib/api/repoCatalog';
 
 	let { tree }: { tree: RequirementVersionTreeResponse } = $props();
 
@@ -11,9 +14,7 @@
 		return new Date(iso).toLocaleString();
 	}
 
-	function hasEvidence(
-		evidence: RequirementVersionTreeResponse['versions'][0]['artifact_versions'][0]['evidence']
-	): boolean {
+	function hasEvidence(evidence: ImplementsEvidenceItem): boolean {
 		return (
 			evidence.evidence_file != null ||
 			evidence.evidence_snippet != null ||
@@ -28,11 +29,10 @@
 		<p class="muted">No requirement versions yet.</p>
 	{:else}
 		<ul class="tree-root">
-			{#each tree.versions as version, vi}
+			{#each tree.versions as version}
 				<li class="tree-node version-node">
-					<details class="node-details" open={vi === 0}>
+					<details class="node-details">
 						<summary class="node-summary">
-							<span class="node-label">Requirement version</span>
 							<code class="mono">{shortSha(version.commit_sha)}</code>
 							<span class="node-date">{formatDt(version.commit_datetime)}</span>
 							<span class="badge status">{version.status}</span>
@@ -41,12 +41,9 @@
 							{:else if version.implemented === false}
 								<span class="badge warn">not implemented</span>
 							{/if}
+							<span class="requirement-text">{version.requirement_text}</span>
 						</summary>
 						<div class="node-body">
-							<div class="field">
-								<span class="field-label">Requirement text</span>
-								<pre class="pre-block">{version.requirement_text}</pre>
-							</div>
 							{#if version.filepath_globs.length > 0}
 								<div class="field inline">
 									<span class="field-label">Scope globs</span>
@@ -186,6 +183,17 @@
 		color: #64748b;
 		font-size: 0.78rem;
 	}
+	.requirement-text {
+		display: block;
+		flex: 1 1 100%;
+		margin: 0.15rem 0 0 0;
+		font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+		font-size: 0.875rem;
+		font-weight: 400;
+		line-height: 1.5;
+		color: #1e293b;
+		min-width: 0;
+	}
 	.filepath {
 		font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 		font-size: 0.78rem;
@@ -218,8 +226,8 @@
 		color: #166534;
 	}
 	.badge.warn {
-		background: #fee2e2;
-		color: #991b1b;
+		background: #fecaca;
+		color: #9f1239;
 	}
 	.node-body {
 		padding: 0 0.65rem 0.65rem 0.65rem;

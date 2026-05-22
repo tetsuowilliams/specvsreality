@@ -21,16 +21,43 @@ from sqlalchemy.orm import Session
 from testcontainers.postgres import PostgresContainer
 
 from specvsreality_api.facades.gantt_chart_facade import GanttChartFacade, create_gantt_chart_facade
+from specvsreality_repositories.models.requirement_version import RequirementVersion
 from specvsreality_repositories.repos import (
     VersionStatus,
     create_artifact_repo,
     create_artifact_version_repo,
     create_git_repo_repo,
+    create_implementation_at_commit_repo,
     create_implements_repo,
     create_requirement_repo,
     create_requirement_version_repo,
     create_spec_repo,
 )
+
+
+def _seed_evaluation(
+    session: Session,
+    *,
+    rv: RequirementVersion,
+    implemented: bool,
+    summary: str = "",
+    gaps: list[str] | None = None,
+) -> int:
+    row = create_implementation_at_commit_repo(session).upsert_evaluation(
+        requirement_version_id=rv.id,
+        evaluation_commit_sha=rv.commit_sha,
+        implemented=implemented,
+        summary=summary,
+        gaps=gaps or [],
+    )
+    return row.id
+
+
+def _link_implements(session: Session, *, implementation_at_commit_id: int, artifact_version_id: int) -> None:
+    create_implements_repo(session).add(
+        implementation_at_commit_id=implementation_at_commit_id,
+        artifact_version_id=artifact_version_id,
+    )
 
 
 def _to_sync_url(url: str) -> str:
@@ -128,17 +155,16 @@ def test_gantt_meta_follows_last_requirement_segment(db_session: Session, git_ro
         status=VersionStatus.INACTIVE.value,
         file_content="y",
     )
-    create_implements_repo(db_session).add(
-        requirement_version_id=rv1.id,
+    _link_implements(
+        db_session,
+        implementation_at_commit_id=_seed_evaluation(db_session, rv=rv1, implemented=True),
         artifact_version_id=av_active.id,
     )
-    create_implements_repo(db_session).add(
-        requirement_version_id=rv2.id,
+    _link_implements(
+        db_session,
+        implementation_at_commit_id=_seed_evaluation(db_session, rv=rv2, implemented=False),
         artifact_version_id=av_inactive.id,
     )
-    rv1.implemented = True
-    rv2.implemented = False
-    db_session.flush()
 
     facade = create_gantt_chart_facade(db_session)
     chart = facade.get_chart(repo_id=git_row_id, spec_id=spec.id, now=now)
@@ -200,8 +226,7 @@ def test_artifacts_sorted_by_filepath_and_raw_status(db_session: Session, git_ro
         filepath_globs=["*.py"],
         status="open",
     )
-    rv.implemented = True
-    db_session.flush()
+    iac = _seed_evaluation(db_session, rv=rv, implemented=True)
     z = create_artifact_repo(db_session).add(filepath="zebra.py")
     a = create_artifact_repo(db_session).add(filepath="a.py")
     av_z = create_artifact_version_repo(db_session).add(
@@ -225,8 +250,8 @@ def test_artifacts_sorted_by_filepath_and_raw_status(db_session: Session, git_ro
         status=VersionStatus.DELETED.value,
         file_content="",
     )
-    create_implements_repo(db_session).add(requirement_version_id=rv.id, artifact_version_id=av_z.id)
-    create_implements_repo(db_session).add(requirement_version_id=rv.id, artifact_version_id=av_a1.id)
+    _link_implements(db_session, implementation_at_commit_id=iac, artifact_version_id=av_z.id)
+    _link_implements(db_session, implementation_at_commit_id=iac, artifact_version_id=av_a1.id)
 
     facade = create_gantt_chart_facade(db_session)
     chart = facade.get_chart(repo_id=git_row_id, spec_id=spec.id, now=now)
@@ -273,7 +298,11 @@ def test_multiple_requirements_with_id_selects_requirement(db_session: Session, 
         status=VersionStatus.ACTIVE.value,
         file_content="",
     )
-    create_implements_repo(db_session).add(requirement_version_id=rv2.id, artifact_version_id=av.id)
+    _link_implements(
+        db_session,
+        implementation_at_commit_id=_seed_evaluation(db_session, rv=rv2, implemented=True),
+        artifact_version_id=av.id,
+    )
 
     facade = create_gantt_chart_facade(db_session)
     chart = facade.get_chart(repo_id=git_row_id, spec_id=spec.id, requirement_id=r2.id, now=now)
@@ -358,10 +387,16 @@ def test_meta_true_when_latest_segment_implemented(db_session: Session, git_row_
         status=VersionStatus.ACTIVE.value,
         file_content="",
     )
-    create_implements_repo(db_session).add(requirement_version_id=rv1.id, artifact_version_id=av1.id)
-    create_implements_repo(db_session).add(requirement_version_id=rv2.id, artifact_version_id=av2.id)
-    rv2.implemented = True
-    db_session.flush()
+    _link_implements(
+        db_session,
+        implementation_at_commit_id=_seed_evaluation(db_session, rv=rv1, implemented=False),
+        artifact_version_id=av1.id,
+    )
+    _link_implements(
+        db_session,
+        implementation_at_commit_id=_seed_evaluation(db_session, rv=rv2, implemented=True),
+        artifact_version_id=av2.id,
+    )
 
     facade = create_gantt_chart_facade(db_session)
     chart = facade.get_chart(repo_id=git_row_id, spec_id=spec.id, now=now)
@@ -385,8 +420,7 @@ def test_artifact_segment_implemented_when_linked_with_updated_status(
         filepath_globs=["*.py"],
         status="open",
     )
-    rv.implemented = True
-    db_session.flush()
+    iac = _seed_evaluation(db_session, rv=rv, implemented=True)
     art = create_artifact_repo(db_session).add(filepath="lib.py")
     av_linked = create_artifact_version_repo(db_session).add(
         artifact_id=art.id,
@@ -395,8 +429,9 @@ def test_artifact_segment_implemented_when_linked_with_updated_status(
         status=VersionStatus.UPDATED.value,
         file_content="",
     )
-    create_implements_repo(db_session).add(
-        requirement_version_id=rv.id,
+    _link_implements(
+        db_session,
+        implementation_at_commit_id=iac,
         artifact_version_id=av_linked.id,
     )
 
@@ -430,10 +465,6 @@ def test_artifact_segment_green_when_linked_to_implemented_rv(
         filepath_globs=["*.py"],
         status="open",
     )
-    rv1.implemented = False
-    rv2.implemented = True
-    db_session.flush()
-
     art = create_artifact_repo(db_session).add(filepath="impl.py")
     av1 = create_artifact_version_repo(db_session).add(
         artifact_id=art.id,
@@ -449,8 +480,16 @@ def test_artifact_segment_green_when_linked_to_implemented_rv(
         status=VersionStatus.ACTIVE.value,
         file_content="",
     )
-    create_implements_repo(db_session).add(requirement_version_id=rv1.id, artifact_version_id=av1.id)
-    create_implements_repo(db_session).add(requirement_version_id=rv2.id, artifact_version_id=av2.id)
+    _link_implements(
+        db_session,
+        implementation_at_commit_id=_seed_evaluation(db_session, rv=rv1, implemented=False),
+        artifact_version_id=av1.id,
+    )
+    _link_implements(
+        db_session,
+        implementation_at_commit_id=_seed_evaluation(db_session, rv=rv2, implemented=True),
+        artifact_version_id=av2.id,
+    )
 
     facade = create_gantt_chart_facade(db_session)
     chart = facade.get_chart(repo_id=git_row_id, spec_id=spec.id, now=now)
@@ -485,10 +524,13 @@ def test_requirement_version_tree_returns_versions_and_evidence(
         filepath_globs=["src/**"],
         status="open",
     )
-    rv2.implemented = True
-    rv2.summary = "Done"
-    rv2.gaps = []
-    db_session.flush()
+    iac = _seed_evaluation(
+        db_session,
+        rv=rv2,
+        implemented=True,
+        summary="Done",
+        gaps=[],
+    )
 
     art = create_artifact_repo(db_session).add(filepath="lib/x.py")
     av = create_artifact_version_repo(db_session).add(
@@ -499,7 +541,7 @@ def test_requirement_version_tree_returns_versions_and_evidence(
         file_content="print('hi')",
     )
     impl = create_implements_repo(db_session).add(
-        requirement_version_id=rv2.id,
+        implementation_at_commit_id=iac,
         artifact_version_id=av.id,
     )
     impl.evidence_file = "lib/x.py"

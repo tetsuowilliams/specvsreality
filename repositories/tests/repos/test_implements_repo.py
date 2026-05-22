@@ -9,12 +9,24 @@ from sqlalchemy.orm import Session
 from specvsreality_repositories.repos import (
     create_artifact_repo,
     create_artifact_version_repo,
+    create_implementation_at_commit_repo,
     create_implements_repo,
     create_requirement_repo,
     create_requirement_version_repo,
     create_spec_repo,
 )
 from specvsreality_repositories.repos.enums import VersionStatus
+
+
+def _iac_for_rv(session: Session, *, rv_id: int, commit_sha: str) -> int:
+    row = create_implementation_at_commit_repo(session).upsert_evaluation(
+        requirement_version_id=rv_id,
+        evaluation_commit_sha=commit_sha,
+        implemented=True,
+        summary="ok",
+        gaps=[],
+    )
+    return row.id
 
 
 def test_add_and_get_round_trip(db_session: Session, git_repo_id: int) -> None:
@@ -37,22 +49,23 @@ def test_add_and_get_round_trip(db_session: Session, git_repo_id: int) -> None:
         status="active",
         file_content="c",
     )
+    iac_id = _iac_for_rv(db_session, rv_id=rv.id, commit_sha="a" * 40)
 
     repo = create_implements_repo(db_session)
-    row = repo.add(requirement_version_id=rv.id, artifact_version_id=av.id)
+    row = repo.add(implementation_at_commit_id=iac_id, artifact_version_id=av.id)
 
-    loaded = repo.get(requirement_version_id=rv.id, artifact_version_id=av.id)
+    loaded = repo.get(implementation_at_commit_id=iac_id, artifact_version_id=av.id)
     assert loaded is not None
-    assert loaded.requirement_version_id == rv.id
+    assert loaded.implementation_at_commit_id == iac_id
     assert loaded.artifact_version_id == av.id
-    assert row.requirement_version_id == rv.id
+    assert row.implementation_at_commit_id == iac_id
 
-    by_pair = repo.get_by_requirement_version_and_artifact_version(
-        requirement_version_id=rv.id,
+    by_pair = repo.get_by_implementation_and_artifact_version(
+        implementation_at_commit_id=iac_id,
         artifact_version_id=av.id,
     )
     assert by_pair is not None
-    assert by_pair.requirement_version_id == rv.id
+    assert by_pair.implementation_at_commit_id == iac_id
     assert by_pair.artifact_version_id == av.id
 
 
@@ -76,12 +89,13 @@ def test_update_evidence_for_filepath(db_session: Session, git_repo_id: int) -> 
         status="active",
         file_content="def hello(): pass",
     )
+    iac_id = _iac_for_rv(db_session, rv_id=rv.id, commit_sha="a" * 40)
 
     repo = create_implements_repo(db_session)
-    repo.add(requirement_version_id=rv.id, artifact_version_id=av.id)
+    repo.add(implementation_at_commit_id=iac_id, artifact_version_id=av.id)
 
     updated = repo.update_evidence_for_filepath(
-        requirement_version_id=rv.id,
+        implementation_at_commit_id=iac_id,
         filepath="src/main.py",
         evidence_file="src/main.py",
         evidence_line_number=1,
@@ -116,10 +130,11 @@ def test_upsert_evidence_creates_row_when_missing(db_session: Session, git_repo_
         status="active",
         file_content="def hello(): pass",
     )
+    iac_id = _iac_for_rv(db_session, rv_id=rv.id, commit_sha="a" * 40)
 
     repo = create_implements_repo(db_session)
     row = repo.upsert_evidence(
-        requirement_version_id=rv.id,
+        implementation_at_commit_id=iac_id,
         artifact_version_id=av.id,
         evidence_file="src/main.py",
         evidence_line_number=1,
@@ -127,11 +142,11 @@ def test_upsert_evidence_creates_row_when_missing(db_session: Session, git_repo_
         evidence_relevance="Defines hello behaviour.",
     )
 
-    assert row.requirement_version_id == rv.id
+    assert row.implementation_at_commit_id == iac_id
     assert row.artifact_version_id == av.id
     assert row.evidence_snippet == "def hello(): pass"
 
 
 def test_get_returns_none_when_pair_missing(db_session: Session) -> None:
     repo = create_implements_repo(db_session)
-    assert repo.get(requirement_version_id=1, artifact_version_id=2) is None
+    assert repo.get(implementation_at_commit_id=1, artifact_version_id=2) is None

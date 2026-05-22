@@ -59,7 +59,7 @@
 		</p>
 		<RequirementVersionTree tree={versionTree} />
 		<h3 class="gantt-heading">Timeline</h3>
-		<GanttChart {chart} />
+		<GanttChart {chart} {versionTree} />
 	</section>
 {/if}
 

@@ -22,6 +22,7 @@ from specvsreality_api.routes import health
 from specvsreality_repositories.repos import (
     create_git_repo_repo,
     create_requirement_repo,
+    create_implementation_at_commit_repo,
     create_requirement_version_repo,
     create_spec_repo,
     create_spec_version_repo,
@@ -176,7 +177,13 @@ def test_spec_detail_requirements_latest_implementation_status(
         filepath_globs=["*.py"],
         status="open",
     )
-    rv_done.implemented = True
+    create_implementation_at_commit_repo(db_session).upsert_evaluation(
+        requirement_version_id=rv_done.id,
+        evaluation_commit_sha=rv_done.commit_sha,
+        implemented=True,
+        summary="",
+        gaps=[],
+    )
     create_requirement_version_repo(db_session).add(
         requirement_id=r_open.id,
         commit_sha="b" * 40,

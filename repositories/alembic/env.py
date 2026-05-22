@@ -20,6 +20,7 @@ from sqlalchemy import create_engine, pool
 from specvsreality_repositories.models import artifact as _artifact  # noqa: F401, E402
 from specvsreality_repositories.models import artifact_version as _artifact_version  # noqa: F401, E402
 from specvsreality_repositories.models import git_repo as _git_repo  # noqa: F401, E402
+from specvsreality_repositories.models import implementation_at_commit as _implementation_at_commit  # noqa: F401, E402
 from specvsreality_repositories.models import implements as _implements  # noqa: F401, E402
 from specvsreality_repositories.models import requirement as _requirement  # noqa: F401, E402
 from specvsreality_repositories.models import requirement_version as _requirement_version  # noqa: F401, E402

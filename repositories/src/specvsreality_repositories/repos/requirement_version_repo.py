@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from specvsreality_repositories.models.artifact import Artifact
 from specvsreality_repositories.models.artifact_version import ArtifactVersion
+from specvsreality_repositories.models.implementation_at_commit import ImplementationAtCommit
 from specvsreality_repositories.models.implements import Implements
 from specvsreality_repositories.models.requirement import Requirement
 from specvsreality_repositories.models.requirement_version import RequirementVersion
@@ -91,7 +92,14 @@ class RequirementVersionRepo:
 
         stmt = (
             select(rv)
-            .join(Implements, Implements.requirement_version_id == rv.id)
+            .join(
+                ImplementationAtCommit,
+                ImplementationAtCommit.requirement_version_id == rv.id,
+            )
+            .join(
+                Implements,
+                Implements.implementation_at_commit_id == ImplementationAtCommit.id,
+            )
             .join(ArtifactVersion, ArtifactVersion.id == Implements.artifact_version_id)
             .join(Artifact, Artifact.id == ArtifactVersion.artifact_id)
             .where(Artifact.filepath == normalized)
@@ -124,25 +132,6 @@ class RequirementVersionRepo:
         self._session.add(row)
         self._session.flush()
         return row
-
-    def update_evaluation(
-        self,
-        *,
-        requirement_version_id: int,
-        implemented: bool,
-        summary: str,
-        gaps: list[str],
-    ) -> RequirementVersion | None:
-        row = self.get_by_id(requirement_version_id)
-        if row is None:
-            return None
-
-        row.implemented = implemented
-        row.summary = summary
-        row.gaps = gaps
-        self._session.flush()
-        return row
-
 
 def create_requirement_version_repo(session: Session) -> RequirementVersionRepo:
     return RequirementVersionRepo(session)

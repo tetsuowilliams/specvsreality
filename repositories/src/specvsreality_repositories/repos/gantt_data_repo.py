@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from specvsreality_repositories.models.artifact import Artifact
 from specvsreality_repositories.models.artifact_version import ArtifactVersion
+from specvsreality_repositories.models.implementation_at_commit import ImplementationAtCommit
 from specvsreality_repositories.models.implements import Implements
 from specvsreality_repositories.models.requirement import Requirement
 from specvsreality_repositories.models.requirement_version import RequirementVersion
@@ -36,21 +37,37 @@ class GanttDataRepo:
         )
         return list(self._session.scalars(stmt).all())
 
+    def list_implementations_at_commit(
+        self,
+        *,
+        requirement_version_ids: Sequence[int],
+    ) -> list[ImplementationAtCommit]:
+        if not requirement_version_ids:
+            return []
+        stmt = select(ImplementationAtCommit).where(
+            ImplementationAtCommit.requirement_version_id.in_(requirement_version_ids),
+        )
+        return list(self._session.scalars(stmt).all())
+
     def list_implements_with_artifact_versions(
         self,
         *,
         requirement_version_ids: Sequence[int],
-    ) -> list[tuple[Implements, ArtifactVersion, Artifact]]:
+    ) -> list[tuple[Implements, ImplementationAtCommit, ArtifactVersion, Artifact]]:
         if not requirement_version_ids:
             return []
         stmt = (
-            select(Implements, ArtifactVersion, Artifact)
+            select(Implements, ImplementationAtCommit, ArtifactVersion, Artifact)
+            .join(
+                ImplementationAtCommit,
+                ImplementationAtCommit.id == Implements.implementation_at_commit_id,
+            )
             .join(ArtifactVersion, ArtifactVersion.id == Implements.artifact_version_id)
             .join(Artifact, Artifact.id == ArtifactVersion.artifact_id)
-            .where(Implements.requirement_version_id.in_(requirement_version_ids))
+            .where(ImplementationAtCommit.requirement_version_id.in_(requirement_version_ids))
         )
         rows = self._session.execute(stmt).all()
-        return [(impl, av, art) for impl, av, art in rows]
+        return [(impl, iac, av, art) for impl, iac, av, art in rows]
 
     def list_artifact_versions_for_artifact_ids_ordered(
         self,

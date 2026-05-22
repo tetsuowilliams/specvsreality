@@ -13,9 +13,9 @@ class Implements(Base):
 
     __tablename__ = "implements"
 
-    requirement_version_id: Mapped[int] = mapped_column(
+    implementation_at_commit_id: Mapped[int] = mapped_column(
         Integer,
-        ForeignKey("requirement_version.id", ondelete="CASCADE"),
+        ForeignKey("implementation_at_commit.id", ondelete="CASCADE"),
         primary_key=True,
     )
     artifact_version_id: Mapped[int] = mapped_column(

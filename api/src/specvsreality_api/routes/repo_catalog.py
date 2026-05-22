@@ -18,6 +18,7 @@ from specvsreality_api.schemas.repo_catalog import (
 )
 from specvsreality_repositories.repos import (
     create_git_repo_repo,
+    create_implementation_at_commit_repo,
     create_requirement_repo,
     create_requirement_version_repo,
     create_spec_repo,
@@ -65,12 +66,26 @@ async def get_repo_spec_detail(
         rv.requirement_id: rv
         for rv in create_requirement_version_repo(session).list_latest(spec_id=spec_id)
     }
+    iac_repo = create_implementation_at_commit_repo(session)
+
+    def _implemented_for_latest_rv(requirement_id: int) -> bool | None:
+        rv = latest_by_req.get(requirement_id)
+        if rv is None:
+            return None
+        iac = iac_repo.get_for_requirement_version_at_commit(
+            requirement_version_id=rv.id,
+            evaluation_commit_sha=rv.commit_sha,
+        )
+        if iac is None:
+            iac = iac_repo.get_latest_for_requirement_version(requirement_version_id=rv.id)
+        return iac.implemented if iac is not None else None
+
     requirement_status = [
         SpecRequirementStatusItem(
             id=r.id,
             paper_id=r.paper_id,
             has_version=r.id in latest_by_req,
-            implemented=latest_by_req[r.id].implemented if r.id in latest_by_req else None,
+            implemented=_implemented_for_latest_rv(r.id),
         )
         for r in requirements
     ]

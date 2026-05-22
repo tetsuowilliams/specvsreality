@@ -1,14 +1,69 @@
 <script lang="ts">
-	import type { GanttChartResponse } from '$lib/api/repoCatalog';
-	import { buildSvelteGanttChartOptions } from '$lib/gantt/mapGanttApiToSvelteGantt';
+	import type { GanttChartResponse, RequirementVersionTreeResponse } from '$lib/api/repoCatalog';
+	import { buildSvelteGanttChartOptions, type GanttTaskModel } from '$lib/gantt/mapGanttApiToSvelteGantt';
 	import moment from 'moment';
 	import { MomentSvelteGanttDateAdapter, SvelteGantt, SvelteGanttTable } from 'svelte-gantt/svelte';
 
-	let { chart }: { chart: GanttChartResponse } = $props();
+	let {
+		chart,
+		versionTree = null
+	}: {
+		chart: GanttChartResponse;
+		versionTree?: RequirementVersionTreeResponse | null;
+	} = $props();
 
 	const dateAdapter = new MomentSvelteGanttDateAdapter(moment);
 
-	const opts = $derived(buildSvelteGanttChartOptions(chart));
+	const opts = $derived(buildSvelteGanttChartOptions(chart, { versionTree }));
+
+	const tooltipByTaskId = $derived(
+		new Map(
+			opts.tasks
+				.filter((t) => t.tooltip != null && t.tooltip.trim().length > 0)
+				.map((t) => [String(t.id), t.tooltip!.trim()] as const)
+		)
+	);
+
+	let floatingTip = $state<string | null>(null);
+	let floatingX = $state(0);
+	let floatingY = $state(0);
+
+	function showFloatingTip(text: string, event: MouseEvent) {
+		floatingTip = text;
+		floatingX = event.clientX;
+		floatingY = event.clientY;
+	}
+
+	function hideFloatingTip() {
+		floatingTip = null;
+	}
+
+	function taskElementHook(node: HTMLElement, model: GanttTaskModel) {
+		const tip = tooltipByTaskId.get(String(model.id)) ?? model.tooltip?.trim();
+		if (!tip) return {};
+
+		const onEnter = (event: MouseEvent) => showFloatingTip(tip, event);
+		const onMove = (event: MouseEvent) => {
+			if (floatingTip != null) {
+				floatingX = event.clientX;
+				floatingY = event.clientY;
+			}
+		};
+		const onLeave = () => hideFloatingTip();
+
+		node.addEventListener('mouseenter', onEnter);
+		node.addEventListener('mousemove', onMove);
+		node.addEventListener('mouseleave', onLeave);
+
+		return {
+			destroy() {
+				node.removeEventListener('mouseenter', onEnter);
+				node.removeEventListener('mousemove', onMove);
+				node.removeEventListener('mouseleave', onLeave);
+				hideFloatingTip();
+			}
+		};
+	}
 
 	/**
 	 * svelte-gantt only stretches when `fitWidth` and timeline clientWidth > `minWidth`.
@@ -36,6 +91,7 @@
 			{#key ganttKey}
 				<SvelteGantt
 					classes="specvsreality-gantt"
+					{taskElementHook}
 					rows={opts.rows}
 					tasks={opts.tasks}
 					timeRanges={opts.timeRanges}
@@ -74,6 +130,16 @@
 			{/key}
 		</div>
 	</div>
+	{#if floatingTip}
+		<div
+			class="gantt-floating-tip"
+			style:left="{floatingX + 14}px"
+			style:top="{floatingY + 14}px"
+			role="tooltip"
+		>
+			{floatingTip}
+		</div>
+	{/if}
 </div>
 
 <style>
@@ -191,13 +257,31 @@
 		border-radius: 0.45rem;
 		box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
 	}
+	.gantt-floating-tip {
+		position: fixed;
+		z-index: 10000;
+		max-width: min(22rem, calc(100vw - 2rem));
+		max-height: 14rem;
+		overflow: auto;
+		padding: 0.5rem 0.65rem;
+		background: #1e293b;
+		color: #f8fafc;
+		font-size: 0.78rem;
+		font-weight: 400;
+		line-height: 1.45;
+		border-radius: 0.4rem;
+		box-shadow: 0 8px 20px rgba(15, 23, 42, 0.22);
+		white-space: pre-wrap;
+		word-break: break-word;
+		pointer-events: none;
+	}
 	:global(.specvsreality-gantt .gantt-status-ok) {
 		background: linear-gradient(180deg, #d1fae5 0%, #a7f3d0 100%) !important;
 		color: transparent;
 	}
 	:global(.specvsreality-gantt .gantt-status-warn) {
-		background: linear-gradient(180deg, #fbbf24 0%, #f59e0b 100%) !important;
-		color: #422006;
+		background: linear-gradient(180deg, #fecaca 0%, #fca5a5 100%) !important;
+		color: transparent;
 	}
 	:global(.specvsreality-gantt .gantt-status-bad) {
 		background: linear-gradient(180deg, #f87171 0%, #ef4444 100%) !important;
