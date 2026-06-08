@@ -13,6 +13,7 @@ dependencies = [
     "uvicorn[standard]>=0.27",
     "pydantic-settings>=2.2",
     "pika>=1.3",
+    "rapidfuzz>=3.0",
     "specvsreality-messages",
     "specvsreality-repositories",
 ]

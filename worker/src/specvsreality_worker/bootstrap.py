@@ -24,13 +24,18 @@ def ensure_handlers_cover_messages(registry: HandlerRegistry) -> None:
         raise RuntimeError(msg)
 
 
-def default_handlers() -> tuple[MessageHandler, ...]:
+def default_handlers(settings: WorkerSettings) -> tuple[MessageHandler, ...]:
     """Default handler set for a standalone worker process."""
-    return (HelloWorldHandler(), ScanRepoHandler())
+    return (HelloWorldHandler(), ScanRepoHandler(settings=settings))
 
 
-def build_handler_registry(handlers: Iterable[MessageHandler] | None = None) -> HandlerRegistry:
-    resolved = tuple(handlers) if handlers is not None else default_handlers()
+def build_handler_registry(
+    handlers: Iterable[MessageHandler] | None = None,
+    *,
+    settings: WorkerSettings | None = None,
+) -> HandlerRegistry:
+    resolved_settings = settings if settings is not None else load_settings()
+    resolved = tuple(handlers) if handlers is not None else default_handlers(resolved_settings)
     registry = HandlerRegistry(resolved)
     ensure_handlers_cover_messages(registry)
     return registry
@@ -57,6 +62,6 @@ def create_queue_consumer(
 ) -> QueueConsumer:
     """Fully wired `QueueConsumer` (settings → registry → processor → AMQP)."""
     resolved_settings = settings if settings is not None else load_settings()
-    registry = build_handler_registry(handlers)
+    registry = build_handler_registry(handlers, settings=resolved_settings)
     processor = build_processor(registry)
     return build_consumer(resolved_settings, processor, connection_factory=connection_factory)

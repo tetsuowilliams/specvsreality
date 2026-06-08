@@ -2,24 +2,28 @@
 
 from specvsreality_repositories.models import (
     Artifact,
+    ArtifactCandidate,
     ArtifactVersion,
     Base,
+    Commit,
     GitRepo,
+    ImplementationAtCommit,
     Implements,
-    Requirement,
-    RequirementVersion,
     Spec,
+    SpecItem,
     SpecVersion,
 )
 
 __all__ = [
     "Artifact",
+    "ArtifactCandidate",
     "ArtifactVersion",
     "Base",
+    "Commit",
     "GitRepo",
+    "ImplementationAtCommit",
     "Implements",
-    "Requirement",
-    "RequirementVersion",
     "Spec",
+    "SpecItem",
     "SpecVersion",
 ]

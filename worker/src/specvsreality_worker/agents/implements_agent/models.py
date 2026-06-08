@@ -1,50 +1,80 @@
-"""Structured outputs for requirement implementation checks."""
+"""Structured inputs and outputs for batch spec-item implementation evaluation."""
 
 from __future__ import annotations
 
 from pydantic import BaseModel, Field
 
 
-class CodeEvidence(BaseModel):
-    file: str = Field(
-        description="Repository-relative path to the file containing the cited code.",
+class SpecItemForEvaluation(BaseModel):
+    """A spec item handed to the evaluator, carrying its database id for round-tripping."""
+
+    spec_item_id: int
+    local_key: str
+    item_type: str
+    text: str
+    success_criteria: list[str] = Field(default_factory=list)
+    failure_criteria: list[str] = Field(default_factory=list)
+
+
+class CandidateArtifactContent(BaseModel):
+    """A candidate artifact and its file content provided to the evaluator."""
+
+    filepath: str
+    content: str
+
+
+class ArtifactEvidence(BaseModel):
+    artifact_id: str = Field(
+        description=(
+            "Repository-relative path of the candidate artifact that provides this evidence, "
+            "matching one of the candidate filepaths provided in the prompt."
+        ),
     )
-    line_number: int | None = Field(
+    evidence_line_number: int | None = Field(
         default=None,
-        description="1-based line number of the cited snippet, when known.",
+        description="1-based line number of the cited snippet within the artifact, when known.",
     )
-    snippet: str = Field(
+    evidence_snippet: str = Field(
         description="Short excerpt of the code that supports the implementation claim.",
     )
-    relevance: str = Field(
-        description="How this code satisfies part of the requirement.",
+    evidence_relevance: str = Field(
+        description="How this code satisfies part of the spec item.",
     )
 
 
-class RequirementJustification(BaseModel):
-    requirement: str = Field(
-        description="The requirement text that was evaluated.",
+class SpecItemEvaluation(BaseModel):
+    spec_item_id: int = Field(
+        description="The spec_item_id of the spec item being evaluated, copied from the input.",
+    )
+    summary: str = Field(
+        description="Brief overall assessment of how the spec item is or is not met.",
     )
     implemented: bool = Field(
         description=(
-            "True only if the codebase materially satisfies the requirement based on "
-            "inspected code."
+            "True only if the candidate artifacts materially satisfy the spec item based on "
+            "the inspected code."
         ),
-    )
-    confidence: str = Field(
-        description='Subjective certainty: one of "high", "medium", "low".',
-    )
-    summary: str = Field(
-        description="Brief overall assessment of how the requirement is or is not met.",
-    )
-    evidence: list[CodeEvidence] = Field(
-        default_factory=list,
-        description="Concrete code citations supporting the assessment.",
     )
     gaps: list[str] = Field(
         default_factory=list,
         description=(
-            "Missing behaviour, unverified assumptions, or ambiguities when implemented is "
-            "false or confidence is not high; otherwise empty."
+            "Missing behaviour, unverified assumptions, or ambiguities when implemented is false "
+            "or confidence is low; otherwise empty."
         ),
+    )
+    confidence: float = Field(
+        ge=0.0,
+        le=1.0,
+        description="Subjective certainty between 0.0 and 1.0.",
+    )
+    implemented_by: list[ArtifactEvidence] = Field(
+        default_factory=list,
+        description="Concrete code citations from the candidate artifacts for the assessment.",
+    )
+
+
+class ImplementsBatchResult(BaseModel):
+    evaluations: list[SpecItemEvaluation] = Field(
+        default_factory=list,
+        description="One evaluation per spec item provided in the input batch.",
     )

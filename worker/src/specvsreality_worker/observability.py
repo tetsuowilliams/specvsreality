@@ -3,16 +3,13 @@
 from __future__ import annotations
 
 import logging
-import os
 
 from specvsreality_worker.agents.pydantic_ai_verbose import (
-    is_pydantic_ai_verbose,
     logfire_console_options,
 )
+from specvsreality_worker.config import WorkerSettings
 
 logger = logging.getLogger(__name__)
-
-_DEFAULT_SERVICE_NAME = "specvsreality-worker"
 
 _initialized = False
 # True after Logfire/OTLP export and pydantic-ai instrumentation are configured.
@@ -31,24 +28,15 @@ def is_logfire_configured() -> bool:
     return logfire_configured
 
 
-def _logfire_service_name() -> str:
-    return os.environ.get("LOGFIRE_SERVICE_NAME", "").strip() or _DEFAULT_SERVICE_NAME
-
-
-def _logfire_environment() -> str | None:
-    value = os.environ.get("LOGFIRE_ENVIRONMENT", "").strip()
-    return value or None
-
-
 def _parse_otlp_headers(raw: str) -> dict[str, str]:
     from opentelemetry.util.re import parse_env_headers
 
     return parse_env_headers(raw, liberal=True)
 
 
-def _logfire_configure_kwargs() -> dict[str, object]:
-    kwargs: dict[str, object] = {"service_name": _logfire_service_name()}
-    environment = _logfire_environment()
+def _logfire_configure_kwargs(settings: WorkerSettings) -> dict[str, object]:
+    kwargs: dict[str, object] = {"service_name": settings.logfire_service_name}
+    environment = settings.logfire_environment_or_none
     if environment is not None:
         kwargs["environment"] = environment
     return kwargs
@@ -62,21 +50,21 @@ def _instrument_pydantic_ai_stack() -> None:
     logfire.instrument_httpx()
 
 
-def init_worker_observability() -> None:
+def init_worker_observability(settings: WorkerSettings) -> None:
     """Configure tracing for Pydantic AI agents.
 
     Uses Logfire cloud when ``LOGFIRE_TOKEN`` is set (typical for deployed environments).
     Otherwise exports OTLP to Opik when ``OPIK_URL_OVERRIDE`` is set (local/self-hosted).
     If neither is set, Logfire is not configured and the worker runs without tracing export.
 
-    Idempotent; call from the worker process entrypoint after loading ``.env``.
+    Idempotent; call from the worker process entrypoint after loading settings.
     """
     global _initialized
     if _initialized:
         return
     _initialized = True
 
-    logfire_token = os.environ.get("LOGFIRE_TOKEN", "").strip()
+    logfire_token = settings.logfire_token.strip()
     if logfire_token:
         try:
             import logfire
@@ -87,20 +75,20 @@ def init_worker_observability() -> None:
         logfire.configure(
             token=logfire_token,
             send_to_logfire=True,
-            console=logfire_console_options(),
-            **_logfire_configure_kwargs(),
+            console=logfire_console_options(settings),
+            **_logfire_configure_kwargs(settings),
         )
         _instrument_pydantic_ai_stack()
         _set_configured(True)
         logger.info(
             "Logfire exporting Pydantic AI traces (service_name=%s, environment=%s%s)",
-            _logfire_service_name(),
-            _logfire_environment() or "unset",
-            ", console_verbose" if is_pydantic_ai_verbose() else "",
+            settings.logfire_service_name,
+            settings.logfire_environment_or_none or "unset",
+            ", console_verbose" if settings.pydantic_ai_verbose_enabled else "",
         )
         return
 
-    base = os.environ.get("OPIK_URL_OVERRIDE", "").strip().rstrip("/")
+    base = settings.opik_base_url
     if not base:
         logger.warning(
             "LOGFIRE_TOKEN and OPIK_URL_OVERRIDE unset; Pydantic AI tracing disabled",
@@ -117,7 +105,7 @@ def init_worker_observability() -> None:
 
     # Opik ingests at POST {OPIK_URL_OVERRIDE}/v1/private/otel/v1/traces (see opik REST client).
     otlp_endpoint = f"{base}/v1/private/otel/v1/traces"
-    headers = os.environ.get("OTEL_EXPORTER_OTLP_HEADERS", "").strip() or None
+    headers = settings.otel_exporter_otlp_headers.strip() or None
     exporter = OTLPSpanExporter(
         endpoint=otlp_endpoint,
         headers=_parse_otlp_headers(headers) if headers else None,
@@ -125,17 +113,17 @@ def init_worker_observability() -> None:
     processor = BatchSpanProcessor(exporter)
     logfire.configure(
         send_to_logfire=False,
-        console=logfire_console_options(),
+        console=logfire_console_options(settings),
         additional_span_processors=[processor],
         metrics=False,
-        **_logfire_configure_kwargs(),
+        **_logfire_configure_kwargs(settings),
     )
     _instrument_pydantic_ai_stack()
     _set_configured(True)
     logger.info(
         "Pydantic AI spans exported via OTLP to %s%s",
         otlp_endpoint,
-        " (console verbose)" if is_pydantic_ai_verbose() else "",
+        " (console verbose)" if settings.pydantic_ai_verbose_enabled else "",
     )
 
 

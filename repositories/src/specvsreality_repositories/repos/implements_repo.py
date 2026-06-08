@@ -1,4 +1,4 @@
-"""Repository access for requirement–artifact implementation links."""
+"""Repository access for implementation evidence links to artifact versions."""
 
 from __future__ import annotations
 

@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-from datetime import datetime
-
 from sqlalchemy import desc, select
 from sqlalchemy.orm import Session
 
 from specvsreality_repositories.models.artifact import Artifact
 from specvsreality_repositories.models.artifact_version import ArtifactVersion
+from specvsreality_repositories.models.commit import Commit
 
 
 class ArtifactVersionRepo:
@@ -21,26 +20,29 @@ class ArtifactVersionRepo:
         return self._session.get(ArtifactVersion, version_id)
 
     def get_latest_for_artifact_filepath(self, *, filepath: str) -> ArtifactVersion | None:
-        """Newest ``ArtifactVersion`` for the artifact with this ``filepath`` (by commit time, then row id)."""
+        """Newest ``ArtifactVersion`` for this ``filepath`` (by commit time, then row id)."""
         normalized = filepath.replace("\\", "/")
         av = ArtifactVersion
         stmt = (
             select(av)
             .join(Artifact, Artifact.id == av.artifact_id)
+            .join(Commit, Commit.id == av.commit_id)
             .where(Artifact.filepath == normalized)
-            .order_by(desc(av.commit_datetime), desc(av.id))
+            .order_by(desc(Commit.committed_at), desc(av.id))
             .limit(1)
         )
         return self._session.scalars(stmt).first()
 
-    def get_by_filepath_and_commit(self, *, filepath: str, commit_sha: str) -> ArtifactVersion | None:
-        """``ArtifactVersion`` for this normalized ``filepath`` at ``commit_sha`` (newest row id if duplicates)."""
+    def get_by_filepath_and_commit(
+        self, *, filepath: str, commit_id: int
+    ) -> ArtifactVersion | None:
+        """``ArtifactVersion`` for this ``filepath`` at ``commit_id`` (newest row id wins)."""
         normalized = filepath.replace("\\", "/")
         av = ArtifactVersion
         stmt = (
             select(av)
             .join(Artifact, Artifact.id == av.artifact_id)
-            .where(Artifact.filepath == normalized, av.commit_sha == commit_sha)
+            .where(Artifact.filepath == normalized, av.commit_id == commit_id)
             .order_by(desc(av.id))
             .limit(1)
         )
@@ -50,15 +52,13 @@ class ArtifactVersionRepo:
         self,
         *,
         artifact_id: int,
-        commit_sha: str,
-        commit_datetime: datetime,
+        commit_id: int,
         status: str,
         file_content: str,
     ) -> ArtifactVersion:
         row = ArtifactVersion(
             artifact_id=artifact_id,
-            commit_sha=commit_sha,
-            commit_datetime=commit_datetime,
+            commit_id=commit_id,
             status=status,
             file_content=file_content,
         )

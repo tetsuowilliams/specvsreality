@@ -7,6 +7,7 @@ from unittest.mock import patch
 import pytest
 
 from specvsreality_worker import observability
+from specvsreality_worker.config import WorkerSettings
 
 
 @pytest.fixture(autouse=True)
@@ -18,32 +19,32 @@ def _reset_observability_state() -> None:
     observability._set_configured(False)
 
 
-def test_init_without_credentials_does_not_raise(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("LOGFIRE_TOKEN", raising=False)
-    monkeypatch.delenv("OPIK_URL_OVERRIDE", raising=False)
-    observability.init_worker_observability()
+def test_init_without_credentials_does_not_raise() -> None:
+    settings = WorkerSettings(logfire_token="", opik_url_override="")
+    observability.init_worker_observability(settings)
     assert observability.is_logfire_configured() is False
 
 
-def test_init_with_logfire_token_enables_tracing(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("LOGFIRE_TOKEN", "test-write-token")
-    monkeypatch.delenv("OPIK_URL_OVERRIDE", raising=False)
-    observability.init_worker_observability()
+def test_init_with_logfire_token_enables_tracing() -> None:
+    settings = WorkerSettings(logfire_token="test-write-token", opik_url_override="")
+    observability.init_worker_observability(settings)
     assert observability.is_logfire_configured() is True
 
 
-def test_logfire_configure_uses_token_and_instruments(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("LOGFIRE_TOKEN", "test-write-token")
-    monkeypatch.setenv("LOGFIRE_SERVICE_NAME", "my-worker")
-    monkeypatch.setenv("LOGFIRE_ENVIRONMENT", "staging")
-    monkeypatch.delenv("OPIK_URL_OVERRIDE", raising=False)
+def test_logfire_configure_uses_token_and_instruments() -> None:
+    settings = WorkerSettings(
+        logfire_token="test-write-token",
+        logfire_service_name="my-worker",
+        logfire_environment="staging",
+        opik_url_override="",
+    )
 
     with (
         patch("logfire.configure") as configure,
         patch("logfire.instrument_pydantic_ai") as instrument_pai,
         patch("logfire.instrument_httpx") as instrument_httpx,
     ):
-        observability.init_worker_observability()
+        observability.init_worker_observability(settings)
 
     configure.assert_called_once()
     assert configure.call_args.kwargs["token"] == "test-write-token"
@@ -54,9 +55,11 @@ def test_logfire_configure_uses_token_and_instruments(monkeypatch: pytest.Monkey
     instrument_httpx.assert_called_once()
 
 
-def test_init_with_opik_uses_full_otlp_traces_endpoint(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("LOGFIRE_TOKEN", raising=False)
-    monkeypatch.setenv("OPIK_URL_OVERRIDE", "http://localhost:5173/api")
+def test_init_with_opik_uses_full_otlp_traces_endpoint() -> None:
+    settings = WorkerSettings(
+        logfire_token="",
+        opik_url_override="http://localhost:5173/api",
+    )
 
     with (
         patch("logfire.configure") as configure,
@@ -69,7 +72,7 @@ def test_init_with_opik_uses_full_otlp_traces_endpoint(monkeypatch: pytest.Monke
             "opentelemetry.sdk.trace.export.BatchSpanProcessor",
         ) as processor_cls,
     ):
-        observability.init_worker_observability()
+        observability.init_worker_observability(settings)
 
     exporter_cls.assert_called_once()
     assert exporter_cls.call_args.kwargs["endpoint"] == (

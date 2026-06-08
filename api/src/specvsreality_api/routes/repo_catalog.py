@@ -1,4 +1,4 @@
-"""Repo catalog and spec detail read routes."""
+"""Repo catalog and spec tree read routes."""
 
 from __future__ import annotations
 
@@ -8,22 +8,12 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from specvsreality_api.deps.session import get_session
-from specvsreality_api.schemas.repo_catalog import (
-    CatalogRequirementItem,
-    CatalogSpecItem,
-    RepoCatalogResponse,
-    SpecDetailResponse,
-    SpecDetailVersionItem,
-    SpecRequirementStatusItem,
-)
-from specvsreality_repositories.repos import (
-    create_git_repo_repo,
-    create_implementation_at_commit_repo,
-    create_requirement_repo,
-    create_requirement_version_repo,
-    create_spec_repo,
-    create_spec_version_repo,
-)
+from specvsreality_api.facades.spec_tree_facade import SpecTreeFacade
+from specvsreality_api.facades.spec_view_facade import SpecViewFacade
+from specvsreality_api.schemas.repo_catalog import CatalogSpecItem, RepoCatalogResponse
+from specvsreality_api.schemas.spec_tree import SpecTreeResponse
+from specvsreality_api.schemas.spec_view import SpecViewResponse
+from specvsreality_repositories.repos import create_git_repo_repo, create_spec_repo
 
 router = APIRouter(tags=["repo-catalog"])
 
@@ -38,68 +28,31 @@ async def get_repo_catalog(
         raise HTTPException(status_code=404, detail="repo not found")
 
     spec_repo = create_spec_repo(session)
-    requirement_repo = create_requirement_repo(session)
-    specs_out: list[CatalogSpecItem] = []
-    for spec in spec_repo.list_for_repo(repo_id=repo_id):
-        reqs = [
-            CatalogRequirementItem(id=r.id, paper_id=r.paper_id)
-            for r in requirement_repo.list_for_spec(spec_id=spec.id)
-        ]
-        specs_out.append(CatalogSpecItem(id=spec.id, paper_id=spec.paper_id, requirements=reqs))
+    specs_out = [
+        CatalogSpecItem(id=spec.id, paper_id=spec.paper_id)
+        for spec in spec_repo.list_for_repo(repo_id=repo_id)
+    ]
     return RepoCatalogResponse(specs=specs_out)
 
 
-@router.get("/repos/{repo_id}/specs/{spec_id}", response_model=SpecDetailResponse)
-async def get_repo_spec_detail(
+@router.get("/repos/{repo_id}/specs/{spec_id}/tree", response_model=SpecTreeResponse)
+async def get_spec_tree(
     repo_id: int,
     spec_id: int,
     session: Annotated[Session, Depends(get_session)],
-) -> SpecDetailResponse:
-    spec_repo = create_spec_repo(session)
-    spec = spec_repo.get_by_id(spec_id)
-    if spec is None or spec.repo_id != repo_id:
-        raise HTTPException(status_code=404, detail="spec not found")
+) -> SpecTreeResponse:
+    return SpecTreeFacade(session).get_tree(repo_id=repo_id, spec_id=spec_id)
 
-    versions = create_spec_version_repo(session).list_for_spec_ordered(spec_id=spec_id)
-    requirements = create_requirement_repo(session).list_for_spec(spec_id=spec_id)
-    latest_by_req = {
-        rv.requirement_id: rv
-        for rv in create_requirement_version_repo(session).list_latest(spec_id=spec_id)
-    }
-    iac_repo = create_implementation_at_commit_repo(session)
 
-    def _implemented_for_latest_rv(requirement_id: int) -> bool | None:
-        rv = latest_by_req.get(requirement_id)
-        if rv is None:
-            return None
-        iac = iac_repo.get_for_requirement_version_at_commit(
-            requirement_version_id=rv.id,
-            evaluation_commit_sha=rv.commit_sha,
-        )
-        if iac is None:
-            iac = iac_repo.get_latest_for_requirement_version(requirement_version_id=rv.id)
-        return iac.implemented if iac is not None else None
-
-    requirement_status = [
-        SpecRequirementStatusItem(
-            id=r.id,
-            paper_id=r.paper_id,
-            has_version=r.id in latest_by_req,
-            implemented=_implemented_for_latest_rv(r.id),
-        )
-        for r in requirements
-    ]
-    return SpecDetailResponse(
-        id=spec.id,
-        paper_id=spec.paper_id,
-        versions=[
-            SpecDetailVersionItem(
-                id=v.id,
-                spec_md=v.spec_md,
-                tasks_md=v.tasks_md,
-                plan_md=v.plan_md,
-            )
-            for v in versions
-        ],
-        requirements=requirement_status,
+@router.get("/repos/{repo_id}/specs/{spec_id}/view", response_model=SpecViewResponse)
+async def get_spec_view(
+    repo_id: int,
+    spec_id: int,
+    session: Annotated[Session, Depends(get_session)],
+    commit_sha: str | None = None,
+) -> SpecViewResponse:
+    return SpecViewFacade(session).get_view(
+        repo_id=repo_id,
+        spec_id=spec_id,
+        commit_sha=commit_sha,
     )

@@ -6,7 +6,14 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from specvsreality_api.config import get_settings
-from specvsreality_api.routes import gantt, health, hello_world, repo_catalog, repos
+from specvsreality_api.routes import (
+    health,
+    hello_world,
+    metrics_dashboard,
+    repo_catalog,
+    repo_dashboard,
+    repos,
+)
 
 
 def create_app() -> FastAPI:
@@ -22,7 +29,8 @@ def create_app() -> FastAPI:
     app.include_router(hello_world.router)
     app.include_router(repos.router)
     app.include_router(repo_catalog.router)
-    app.include_router(gantt.router)
+    app.include_router(repo_dashboard.router)
+    app.include_router(metrics_dashboard.router)
     app.include_router(health.router)
     return app
 

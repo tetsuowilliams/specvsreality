@@ -17,14 +17,16 @@ from alembic import context
 from sqlalchemy import create_engine, pool
 
 # Import models so metadata is populated
+from specvsreality_repositories.models import agent_run_metric as _agent_run_metric  # noqa: F401, E402
 from specvsreality_repositories.models import artifact as _artifact  # noqa: F401, E402
+from specvsreality_repositories.models import artifact_candidate as _artifact_candidate  # noqa: F401, E402
 from specvsreality_repositories.models import artifact_version as _artifact_version  # noqa: F401, E402
+from specvsreality_repositories.models import commit as _commit  # noqa: F401, E402
 from specvsreality_repositories.models import git_repo as _git_repo  # noqa: F401, E402
 from specvsreality_repositories.models import implementation_at_commit as _implementation_at_commit  # noqa: F401, E402
 from specvsreality_repositories.models import implements as _implements  # noqa: F401, E402
-from specvsreality_repositories.models import requirement as _requirement  # noqa: F401, E402
-from specvsreality_repositories.models import requirement_version as _requirement_version  # noqa: F401, E402
 from specvsreality_repositories.models import spec as _spec  # noqa: F401, E402
+from specvsreality_repositories.models import spec_item as _spec_item  # noqa: F401, E402
 from specvsreality_repositories.models import spec_version as _spec_version  # noqa: F401, E402
 from specvsreality_repositories.models.base import Base  # noqa: E402
 

@@ -6,6 +6,10 @@
 
 body {
 	margin: 0;
-	background: radial-gradient(circle at top, #f8fbff 0%, #f1f5f9 42%, #eef2ff 100%);
+	background: #f1f5f9;
 	color: #0f172a;
+}
+
+* {
+	box-sizing: border-box;
 }

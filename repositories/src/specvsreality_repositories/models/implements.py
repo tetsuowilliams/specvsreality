@@ -1,4 +1,4 @@
-"""Links a requirement version to an artifact version."""
+"""Links a spec-item implementation evaluation to an artifact version."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from specvsreality_repositories.models.base import Base
 
 
 class Implements(Base):
-    """Many-to-many: which artifact versions implement a requirement version."""
+    """Many-to-many: which artifact versions provide evidence for an implementation evaluation."""
 
     __tablename__ = "implements"
 

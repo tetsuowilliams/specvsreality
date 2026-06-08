@@ -11,14 +11,16 @@ def test_expected_tables_exist(engine: Engine) -> None:
     tables = set(inspector.get_table_names())
     expected = {
         "alembic_version",
+        "agent_run_metric",
         "artifact",
+        "artifact_candidate",
         "artifact_version",
+        "commit",
         "git_repo",
         "implementation_at_commit",
         "implements",
-        "requirement",
-        "requirement_version",
         "spec",
+        "spec_item",
         "spec_version",
     }
     assert expected.issubset(tables)

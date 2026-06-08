@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+
 from sqlalchemy import desc, select
 from sqlalchemy.orm import Session
 
@@ -17,44 +19,44 @@ class ImplementationAtCommitRepo:
     def get_by_id(self, row_id: int) -> ImplementationAtCommit | None:
         return self._session.get(ImplementationAtCommit, row_id)
 
-    def get_for_requirement_version_at_commit(
+    def get_for_spec_item_at_commit(
         self,
         *,
-        requirement_version_id: int,
-        evaluation_commit_sha: str,
+        spec_item_id: int,
+        commit_id: int,
     ) -> ImplementationAtCommit | None:
         stmt = select(ImplementationAtCommit).where(
-            ImplementationAtCommit.requirement_version_id == requirement_version_id,
-            ImplementationAtCommit.evaluation_commit_sha == evaluation_commit_sha,
+            ImplementationAtCommit.spec_item_id == spec_item_id,
+            ImplementationAtCommit.commit_id == commit_id,
         )
         return self._session.scalars(stmt).first()
 
-    def list_for_requirement_versions(
+    def list_for_spec_items(
         self,
         *,
-        requirement_version_ids: list[int],
+        spec_item_ids: Sequence[int],
     ) -> list[ImplementationAtCommit]:
-        if not requirement_version_ids:
+        if not spec_item_ids:
             return []
         stmt = (
             select(ImplementationAtCommit)
-            .where(ImplementationAtCommit.requirement_version_id.in_(requirement_version_ids))
+            .where(ImplementationAtCommit.spec_item_id.in_(spec_item_ids))
             .order_by(
-                ImplementationAtCommit.requirement_version_id.asc(),
-                ImplementationAtCommit.evaluation_commit_sha.asc(),
+                ImplementationAtCommit.spec_item_id.asc(),
+                ImplementationAtCommit.commit_id.asc(),
             )
         )
         return list(self._session.scalars(stmt).all())
 
-    def get_latest_for_requirement_version(
+    def get_latest_for_spec_item(
         self,
         *,
-        requirement_version_id: int,
+        spec_item_id: int,
     ) -> ImplementationAtCommit | None:
         stmt = (
             select(ImplementationAtCommit)
-            .where(ImplementationAtCommit.requirement_version_id == requirement_version_id)
-            .order_by(desc(ImplementationAtCommit.evaluation_commit_sha), desc(ImplementationAtCommit.id))
+            .where(ImplementationAtCommit.spec_item_id == spec_item_id)
+            .order_by(desc(ImplementationAtCommit.commit_id), desc(ImplementationAtCommit.id))
             .limit(1)
         )
         return self._session.scalars(stmt).first()
@@ -62,31 +64,31 @@ class ImplementationAtCommitRepo:
     def upsert_evaluation(
         self,
         *,
-        requirement_version_id: int,
-        evaluation_commit_sha: str,
+        spec_item_id: int,
+        commit_id: int,
         implemented: bool,
         summary: str,
-        gaps: list[str],
-        confidence: str | None = None,
+        gaps: Sequence[str],
+        confidence: float | None = None,
     ) -> ImplementationAtCommit:
-        row = self.get_for_requirement_version_at_commit(
-            requirement_version_id=requirement_version_id,
-            evaluation_commit_sha=evaluation_commit_sha,
+        row = self.get_for_spec_item_at_commit(
+            spec_item_id=spec_item_id,
+            commit_id=commit_id,
         )
         if row is None:
             row = ImplementationAtCommit(
-                requirement_version_id=requirement_version_id,
-                evaluation_commit_sha=evaluation_commit_sha,
+                spec_item_id=spec_item_id,
+                commit_id=commit_id,
                 implemented=implemented,
                 summary=summary,
-                gaps=gaps,
+                gaps=list(gaps),
                 confidence=confidence,
             )
             self._session.add(row)
         else:
             row.implemented = implemented
             row.summary = summary
-            row.gaps = gaps
+            row.gaps = list(gaps)
             row.confidence = confidence
 
         self._session.flush()

@@ -8,15 +8,9 @@ async function readJson<T>(res: Response): Promise<T> {
 	return (await res.json()) as T;
 }
 
-export type CatalogRequirementItem = {
-	id: number;
-	paper_id: string;
-};
-
 export type CatalogSpecItem = {
 	id: number;
 	paper_id: string;
-	requirements: CatalogRequirementItem[];
 };
 
 export type RepoCatalogResponse = {
@@ -28,146 +22,133 @@ export async function fetchRepoCatalog(repoId: string | number): Promise<RepoCat
 	return readJson(res);
 }
 
-export type SpecDetailVersionItem = {
-	id: number;
-	spec_md: string;
-	tasks_md: string | null;
-	plan_md: string | null;
-};
-
-export type SpecRequirementStatusItem = {
-	id: number;
-	paper_id: string;
-	has_version: boolean;
-	implemented: boolean | null;
-};
-
-export type SpecDetailResponse = {
-	id: number;
-	paper_id: string;
-	versions: SpecDetailVersionItem[];
-	requirements: SpecRequirementStatusItem[];
-};
-
-export async function fetchSpecDetail(
-	repoId: string | number,
-	specId: string | number
-): Promise<SpecDetailResponse> {
-	const res = await fetch(`${publicApiBaseUrl()}/repos/${repoId}/specs/${specId}`);
-	return readJson(res);
-}
-
-export type GanttHistorySegment = {
-	start: string;
-	end: string;
-	status: string;
-	commit: string | null;
-};
-
-export type GanttRequirementBlock = {
-	paper_id: string;
-	history: GanttHistorySegment[];
-};
-
-export type GanttArtifactBlock = {
+export type SpecTreeImplementsArtifact = {
+	artifact_version_id: number;
 	filepath: string;
-	history: GanttHistorySegment[];
-};
-
-export type GanttChartMeta = {
-	requirement_implemented: boolean;
-};
-
-export type GanttChartResponse = {
-	meta: GanttChartMeta;
-	requirement: GanttRequirementBlock;
-	artifacts: GanttArtifactBlock[];
-};
-
-export async function fetchGanttChart(
-	repoId: string | number,
-	specId: string | number,
-	options?: { requirementId?: string | number | null }
-): Promise<GanttChartResponse> {
-	const rid = options?.requirementId;
-	const q =
-		rid !== undefined && rid !== null && String(rid).length > 0
-			? `?requirement_id=${encodeURIComponent(String(rid))}`
-			: '';
-	const res = await fetch(`${publicApiBaseUrl()}/repos/${repoId}/specs/${specId}/gantt${q}`);
-	return readJson(res);
-}
-
-export type RequirementLatestVersionResponse = {
-	paper_id: string;
-	requirement_text: string;
-	commit_sha: string;
-	commit_datetime: string;
-};
-
-export type ImplementsEvidenceItem = {
 	evidence_file: string | null;
 	evidence_line_number: number | null;
 	evidence_snippet: string | null;
 	evidence_relevance: string | null;
 };
 
-export type RequirementTreeArtifactVersion = {
-	artifact_version_id: number;
-	filepath: string;
-	commit_sha: string;
-	commit_datetime: string;
-	status: string;
-	file_content: string;
-	evidence: ImplementsEvidenceItem;
-};
-
-export type RequirementTreeVersion = {
+export type SpecTreeImplementation = {
 	id: number;
 	commit_sha: string;
-	commit_datetime: string;
-	requirement_text: string;
-	filepath_globs: string[];
-	status: string;
-	implemented: boolean | null;
+	commit_message: string;
+	committed_at: string;
+	implemented: boolean;
 	summary: string | null;
-	gaps: string[] | null;
-	artifact_versions: RequirementTreeArtifactVersion[];
+	gaps: string[];
+	confidence: number | null;
+	artifacts: SpecTreeImplementsArtifact[];
 };
 
-export type RequirementVersionTreeResponse = {
+export type SpecTreeItem = {
+	id: number;
+	local_key: string;
+	item_type: string;
+	importance: string;
+	text: string;
+	source_quote: string;
+	success_criteria: string[];
+	failure_criteria: string[];
+	implementations: SpecTreeImplementation[];
+};
+
+export type SpecTreeVersion = {
+	id: number;
+	commit_sha: string;
+	commit_message: string;
+	committed_at: string;
+	title: string | null;
+	summary: string | null;
+	spec_md: string;
+	tasks_md: string | null;
+	plan_md: string | null;
+	items: SpecTreeItem[];
+};
+
+export type SpecTreeResponse = {
+	id: number;
 	paper_id: string;
-	versions: RequirementTreeVersion[];
+	versions: SpecTreeVersion[];
 };
 
-export async function fetchRequirementVersionTree(
+export async function fetchSpecTree(
 	repoId: string | number,
-	specId: string | number,
-	options?: { requirementId?: string | number | null }
-): Promise<RequirementVersionTreeResponse> {
-	const rid = options?.requirementId;
-	const q =
-		rid !== undefined && rid !== null && String(rid).length > 0
-			? `?requirement_id=${encodeURIComponent(String(rid))}`
-			: '';
-	const res = await fetch(
-		`${publicApiBaseUrl()}/repos/${repoId}/specs/${specId}/requirements/version-tree${q}`
-	);
+	specId: string | number
+): Promise<SpecTreeResponse> {
+	const res = await fetch(`${publicApiBaseUrl()}/repos/${repoId}/specs/${specId}/tree`);
 	return readJson(res);
 }
 
-export async function fetchRequirementLatestVersion(
+export type SpecViewItemSpan = {
+	start: number;
+	end: number;
+};
+
+export type SpecDocument = 'spec' | 'tasks' | 'plan';
+
+export type SpecViewItemSpans = {
+	spec: SpecViewItemSpan | null;
+	tasks: SpecViewItemSpan | null;
+	plan: SpecViewItemSpan | null;
+};
+
+export type SpecViewItem = {
+	id: number;
+	local_key: string;
+	item_type: string;
+	importance: string;
+	text: string;
+	source_quote: string;
+	spans: SpecViewItemSpans;
+	success_criteria: string[];
+	failure_criteria: string[];
+	implementations: SpecTreeImplementation[];
+};
+
+export type SpecViewSummary = {
+	total_items: number;
+	tracked_items: number;
+	evaluated: number;
+	implemented: number;
+	mandatory_gaps: number;
+	low_confidence: number;
+	unevaluated: number;
+	coverage_percent: number | null;
+	status: string;
+};
+
+export type SpecViewVersion = {
+	id: number;
+	commit_sha: string;
+	commit_message: string;
+	committed_at: string;
+	title: string | null;
+	summary: string | null;
+	spec_md: string;
+	tasks_md: string | null;
+	plan_md: string | null;
+};
+
+export type SpecViewResponse = {
+	id: number;
+	paper_id: string;
+	version: SpecViewVersion;
+	summary: SpecViewSummary;
+	items: SpecViewItem[];
+};
+
+export type SpecTab = 'overview' | SpecDocument;
+
+export async function fetchSpecView(
 	repoId: string | number,
 	specId: string | number,
-	options?: { requirementId?: string | number | null }
-): Promise<RequirementLatestVersionResponse> {
-	const rid = options?.requirementId;
-	const q =
-		rid !== undefined && rid !== null && String(rid).length > 0
-			? `?requirement_id=${encodeURIComponent(String(rid))}`
-			: '';
-	const res = await fetch(
-		`${publicApiBaseUrl()}/repos/${repoId}/specs/${specId}/requirements/latest-version${q}`
-	);
+	commitSha?: string
+): Promise<SpecViewResponse> {
+	const url = new URL(`${publicApiBaseUrl()}/repos/${repoId}/specs/${specId}/view`);
+	if (commitSha) url.searchParams.set('commit_sha', commitSha);
+	const res = await fetch(url);
 	return readJson(res);
 }

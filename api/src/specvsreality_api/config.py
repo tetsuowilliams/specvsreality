@@ -32,6 +32,8 @@ class Settings(BaseSettings):
     rabbitmq_password: str = Field(default="", validation_alias="RABBITMQ_PASSWORD")
     rabbitmq_queue_name: str = Field(default="messages", validation_alias="RABBITMQ_QUEUE_NAME")
 
+    database_url: str = Field(default="", validation_alias="DATABASE_URL")
+
     @field_validator("cors_origins", mode="before")
     @classmethod
     def parse_cors(cls, v: object) -> list[str]:
@@ -53,6 +55,17 @@ class Settings(BaseSettings):
                     return [str(x) for x in data]
             return [p.strip() for p in s.split(",") if p.strip()]
         return [str(v)]
+
+    def sync_database_url(self) -> str:
+        """Normalize common Postgres URL schemes for sync SQLAlchemy."""
+        url = self.database_url
+        if url.startswith("postgresql+asyncpg://"):
+            return url.replace("postgresql+asyncpg://", "postgresql+psycopg://", 1)
+        if url.startswith("postgresql+psycopg2://"):
+            return url.replace("postgresql+psycopg2://", "postgresql+psycopg://", 1)
+        if url.startswith("postgresql://"):
+            return url.replace("postgresql://", "postgresql+psycopg://", 1)
+        return url
 
 
 @lru_cache

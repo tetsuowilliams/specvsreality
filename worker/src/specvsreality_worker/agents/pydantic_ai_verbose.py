@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import logging
-import os
 from collections.abc import AsyncIterable
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from specvsreality_worker.config import WorkerSettings
 
 logger = logging.getLogger(__name__)
 
@@ -17,27 +19,23 @@ _VERBOSE_LOGGERS = (
 )
 
 
-def is_pydantic_ai_verbose() -> bool:
-    """True when ``PYDANTIC_AI_VERBOSE`` or ``LOGFIRE_CONSOLE_VERBOSE`` is a truthy value."""
-    for name in ("PYDANTIC_AI_VERBOSE", "LOGFIRE_CONSOLE_VERBOSE"):
-        raw = os.environ.get(name, "").strip().lower()
-        if raw in {"1", "true", "yes", "on"}:
-            return True
-    return False
+def is_pydantic_ai_verbose(settings: WorkerSettings) -> bool:
+    """True when verbose console logging is enabled in worker settings."""
+    return settings.pydantic_ai_verbose_enabled
 
 
-def configure_verbose_loggers() -> None:
+def configure_verbose_loggers(settings: WorkerSettings) -> None:
     """Raise log level for Pydantic AI and HTTP client libraries."""
-    if not is_pydantic_ai_verbose():
+    if not is_pydantic_ai_verbose(settings):
         return
     for name in _VERBOSE_LOGGERS:
         logging.getLogger(name).setLevel(logging.DEBUG)
     logger.info("Pydantic AI verbose logging enabled for %s", ", ".join(_VERBOSE_LOGGERS))
 
 
-def logfire_console_options() -> object | bool:
+def logfire_console_options(settings: WorkerSettings) -> object | bool:
     """Logfire ``console`` kwarg for ``logfire.configure``."""
-    if not is_pydantic_ai_verbose():
+    if not is_pydantic_ai_verbose(settings):
         return False
     import logfire
 
@@ -60,9 +58,9 @@ def _event_summary(event: object) -> str:
     return str(kind)
 
 
-def build_event_stream_handler() -> Any | None:
+def build_event_stream_handler(settings: WorkerSettings) -> Any | None:
     """Return an async handler for ``Agent.run_sync(..., event_stream_handler=...)``."""
-    if not is_pydantic_ai_verbose():
+    if not is_pydantic_ai_verbose(settings):
         return None
 
     async def _handler(_ctx: object, stream: AsyncIterable[object]) -> None:

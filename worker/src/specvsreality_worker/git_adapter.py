@@ -361,6 +361,14 @@ class GitAdapter:
         commit = _commit_or_raise(self._repo, commit_sha)
         return commit.authored_datetime
 
+    def commit_message(self, commit_sha: str) -> str:
+        """Full commit message for a commit SHA."""
+        commit = _commit_or_raise(self._repo, commit_sha)
+        message = commit.message
+        if isinstance(message, bytes):
+            message = message.decode("utf-8", errors="replace")
+        return message.strip()
+
     def blob_size_at_commit(self, commit_sha: str, relpath: str) -> int:
         """Byte size of the blob at ``relpath`` in the given commit."""
         _commit_or_raise(self._repo, commit_sha)

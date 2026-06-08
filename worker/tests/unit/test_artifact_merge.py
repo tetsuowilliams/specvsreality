@@ -10,7 +10,7 @@ import pytest
 
 from specvsreality_repositories.repos.enums import VersionStatus
 from specvsreality_worker.core import ArtifactMerge, CommitContext
-from specvsreality_worker.core.spec_detection import ArtifactType, SpecDetection
+from specvsreality_worker.core.spec_detection import ArtifactType
 from specvsreality_worker.git_adapter import ChangedPath, GitCommitPathInformation, PathChangeState
 
 
@@ -18,23 +18,19 @@ from specvsreality_worker.git_adapter import ChangedPath, GitCommitPathInformati
 def commit() -> CommitContext:
     return CommitContext(
         repo_id=1,
+        commit_id=7,
         commit_sha="deadbeef",
         commit_datetime=datetime(2026, 2, 1, tzinfo=UTC),
+        commit_message="msg",
     )
 
 
 @pytest.fixture
 def artifact_merge() -> ArtifactMerge:
     return ArtifactMerge(
-        tree_scan=MagicMock(),
         git_adapter=MagicMock(),
         artifact_repo=MagicMock(),
         artifact_version_repo=MagicMock(),
-        requirement_repo=MagicMock(),
-        requirement_version_repo=MagicMock(),
-        implements_repo=MagicMock(),
-        implements_evaluation_agent=MagicMock(),
-        spec_detection=SpecDetection(),
     )
 
 
@@ -83,8 +79,7 @@ def test_merge_artifacts_creates_active_version_for_new_code_file(
     )
     artifact_merge._artifact_version_repo.add.assert_called_once_with(
         artifact_id=100,
-        commit_sha=commit.commit_sha,
-        commit_datetime=commit.commit_datetime,
+        commit_id=commit.commit_id,
         status=VersionStatus.ACTIVE.value,
         file_content="print('hi')\n",
     )
@@ -108,8 +103,7 @@ def test_merge_artifacts_reuses_artifact_and_marks_modified_as_updated(
     artifact_merge._artifact_repo.add.assert_not_called()
     artifact_merge._artifact_version_repo.add.assert_called_once_with(
         artifact_id=40,
-        commit_sha=commit.commit_sha,
-        commit_datetime=commit.commit_datetime,
+        commit_id=commit.commit_id,
         status=VersionStatus.UPDATED.value,
         file_content="v2",
     )
@@ -132,8 +126,7 @@ def test_merge_artifacts_records_deleted_code_with_empty_content(
     artifact_merge._git_adapter.file_at_commit.assert_not_called()
     artifact_merge._artifact_version_repo.add.assert_called_once_with(
         artifact_id=50,
-        commit_sha=commit.commit_sha,
-        commit_datetime=commit.commit_datetime,
+        commit_id=commit.commit_id,
         status=VersionStatus.DELETED.value,
         file_content="",
     )

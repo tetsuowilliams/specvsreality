@@ -5,15 +5,13 @@ from specvsreality_worker.agents.spec_extraction_agent.agent import (
     create_spec_extraction_agent,
 )
 from specvsreality_worker.agents.spec_extraction_agent.models import (
-    ParsedRequirement,
-    SpecExtractionResult,
+    ExtractedSpec,
+    ExtractedSpecItem,
 )
 
-FunctionalRequirement = ParsedRequirement
-
 __all__ = [
-    "FunctionalRequirement",
+    "ExtractedSpec",
+    "ExtractedSpecItem",
     "SpecExtractionAgent",
-    "SpecExtractionResult",
     "create_spec_extraction_agent",
 ]

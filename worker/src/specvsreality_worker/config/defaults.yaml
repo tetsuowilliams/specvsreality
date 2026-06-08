@@ -11,3 +11,11 @@ blocked_connection_timeout: 0
 reconnect_delay_seconds: 5
 username: guest
 password: ""
+
+model_token_costs:
+  openai:gpt-4o-mini:
+    input_per_million: 0.15
+    output_per_million: 0.60
+  openai:gpt-5.4-mini:
+    input_per_million: 0.75
+    output_per_million: 4.50

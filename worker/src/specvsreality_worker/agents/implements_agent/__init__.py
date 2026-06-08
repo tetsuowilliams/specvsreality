@@ -1,17 +1,22 @@
-"""Requirement vs artifact implementation evaluation."""
+"""Batch spec-item implementation evaluation agent."""
 
 from specvsreality_worker.agents.implements_agent.agent import (
-    ImplementsEvaluationAgent,
-    create_implements_evaluation_agent,
+    ImplementsAgent,
+    create_implements_agent,
 )
 from specvsreality_worker.agents.implements_agent.models import (
-    CodeEvidence,
-    RequirementJustification,
+    ArtifactEvidence,
+    CandidateArtifactContent,
+    ImplementsBatchResult,
+    SpecItemEvaluation,
+    SpecItemForEvaluation,
 )
-
 __all__ = [
-    "CodeEvidence",
-    "ImplementsEvaluationAgent",
-    "RequirementJustification",
-    "create_implements_evaluation_agent",
+    "ArtifactEvidence",
+    "CandidateArtifactContent",
+    "ImplementsAgent",
+    "ImplementsBatchResult",
+    "SpecItemEvaluation",
+    "SpecItemForEvaluation",
+    "create_implements_agent",
 ]

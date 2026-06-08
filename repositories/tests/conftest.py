@@ -82,3 +82,17 @@ def git_repo_id(db_session: Session) -> int:
     row = result.fetchone()
     assert row is not None
     return int(row[0])
+
+
+@pytest.fixture()
+def commit_id(db_session: Session, git_repo_id: int) -> int:
+    from datetime import UTC, datetime
+
+    from specvsreality_repositories.repos import create_commit_repo
+
+    return create_commit_repo(db_session).get_or_create(
+        repo_id=git_repo_id,
+        commit_sha="a" * 40,
+        commit_message="commit message",
+        committed_at=datetime(2026, 1, 15, tzinfo=UTC),
+    ).id

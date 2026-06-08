@@ -20,10 +20,10 @@ class SpecVersionRepo:
     def get_by_id(self, version_id: int) -> SpecVersion | None:
         return self._session.get(SpecVersion, version_id)
 
-    def get_for_spec_at_commit(self, *, spec_id: int, commit_sha: str) -> SpecVersion | None:
+    def get_for_spec_at_commit(self, *, spec_id: int, commit_id: int) -> SpecVersion | None:
         stmt = (
             select(SpecVersion)
-            .where(SpecVersion.spec_id == spec_id, SpecVersion.commit_sha == commit_sha)
+            .where(SpecVersion.spec_id == spec_id, SpecVersion.commit_id == commit_id)
             .order_by(desc(SpecVersion.id))
             .limit(1)
         )
@@ -41,22 +41,24 @@ class SpecVersionRepo:
         self,
         *,
         spec_id: int,
+        commit_id: int,
+        title: str | None,
+        summary: str | None,
         spec_md: str,
         tasks_md: str | None,
         plan_md: str | None,
-        commit_sha: str,
         created_at: datetime,
-        committed_at: datetime | None,
         status: VersionStatus,
     ) -> SpecVersion:
         row = SpecVersion(
             spec_id=spec_id,
+            commit_id=commit_id,
+            title=title,
+            summary=summary,
             spec_md=spec_md,
             tasks_md=tasks_md,
             plan_md=plan_md,
-            commit_sha=commit_sha,
             created_at=created_at,
-            committed_at=committed_at,
             status=status.value if isinstance(status, VersionStatus) else status,
         )
         self._session.add(row)

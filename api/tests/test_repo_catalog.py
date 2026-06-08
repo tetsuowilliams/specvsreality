@@ -1,4 +1,4 @@
-"""Integration tests for repo catalog routes (Postgres via testcontainers)."""
+"""Integration tests for repo catalog and spec tree routes (Postgres via testcontainers)."""
 
 from __future__ import annotations
 
@@ -19,11 +19,15 @@ from testcontainers.postgres import PostgresContainer
 from specvsreality_api.deps.session import get_session
 from specvsreality_api.main import create_app
 from specvsreality_api.routes import health
+from specvsreality_repositories.models.enums import SpecItemImportance, SpecItemType
 from specvsreality_repositories.repos import (
+    create_artifact_repo,
+    create_artifact_version_repo,
+    create_commit_repo,
     create_git_repo_repo,
-    create_requirement_repo,
     create_implementation_at_commit_repo,
-    create_requirement_version_repo,
+    create_implements_repo,
+    create_spec_item_repo,
     create_spec_repo,
     create_spec_version_repo,
 )
@@ -102,105 +106,106 @@ def catalog_client(db_session: Session) -> Generator[TestClient, None, None]:
     app.dependency_overrides.clear()
 
 
-def test_get_repo_catalog_and_spec_detail(catalog_client: TestClient, db_session: Session) -> None:
+def test_get_repo_catalog_lists_specs(catalog_client: TestClient, db_session: Session) -> None:
     gid = create_git_repo_repo(db_session).add(
         name="c1",
         url="https://example.test/c1.git",
         cursor_position="a" * 40,
         location="/tmp/c1",
     ).id
-    spec = create_spec_repo(db_session).add(paper_id="paper-1", repo_id=gid)
-    create_requirement_repo(db_session).add(spec_id=spec.id, paper_id="req-a")
-    create_requirement_repo(db_session).add(spec_id=spec.id, paper_id="req-b")
-    create_spec_version_repo(db_session).add(
-        spec_id=spec.id,
-        spec_md="# s",
-        tasks_md="- t",
-        plan_md="p",
-        commit_sha=_COMMIT_SHA,
-        created_at=_COMMIT_DT,
-        committed_at=_COMMIT_DT,
-        status=VersionStatus.ACTIVE,
-    )
-    create_spec_version_repo(db_session).add(
-        spec_id=spec.id,
-        spec_md="# s2",
-        tasks_md=None,
-        plan_md=None,
-        commit_sha=_COMMIT_SHA,
-        created_at=_COMMIT_DT,
-        committed_at=_COMMIT_DT,
-        status=VersionStatus.ACTIVE,
-    )
+    create_spec_repo(db_session).add(paper_id="paper-1", repo_id=gid)
 
     cat = catalog_client.get(f"/repos/{gid}/catalog")
     assert cat.status_code == 200
     body = cat.json()
     assert len(body["specs"]) == 1
     assert body["specs"][0]["paper_id"] == "paper-1"
-    assert len(body["specs"][0]["requirements"]) == 2
-
-    detail = catalog_client.get(f"/repos/{gid}/specs/{spec.id}")
-    assert detail.status_code == 200
-    d = detail.json()
-    assert d["paper_id"] == "paper-1"
-    assert len(d["versions"]) == 2
-    assert d["versions"][0]["spec_md"] == "# s"
-    assert d["versions"][0]["tasks_md"] == "- t"
-    assert d["versions"][0]["plan_md"] == "p"
-    assert d["versions"][1]["spec_md"] == "# s2"
-    assert d["versions"][1]["tasks_md"] is None
-    assert d["versions"][1]["plan_md"] is None
-    assert len(d["requirements"]) == 2
-    assert {r["paper_id"] for r in d["requirements"]} == {"req-a", "req-b"}
-    assert all(r["has_version"] is False for r in d["requirements"])
-    assert all(r["implemented"] is None for r in d["requirements"])
+    assert "requirements" not in body["specs"][0]
 
 
-def test_spec_detail_requirements_latest_implementation_status(
+def test_spec_tree_returns_versions_items_and_implementations(
     catalog_client: TestClient, db_session: Session
 ) -> None:
     gid = create_git_repo_repo(db_session).add(
         name="c2",
         url="https://example.test/c2.git",
-        cursor_position="d" * 40,
+        cursor_position="a" * 40,
         location="/tmp/c2",
     ).id
+    commit = create_commit_repo(db_session).get_or_create(
+        repo_id=gid,
+        commit_sha=_COMMIT_SHA,
+        commit_message="add feature",
+        committed_at=_COMMIT_DT,
+    )
     spec = create_spec_repo(db_session).add(paper_id="paper-2", repo_id=gid)
-    r_done = create_requirement_repo(db_session).add(spec_id=spec.id, paper_id="done")
-    r_open = create_requirement_repo(db_session).add(spec_id=spec.id, paper_id="open")
-    rv_done = create_requirement_version_repo(db_session).add(
-        requirement_id=r_done.id,
-        commit_sha="a" * 40,
-        commit_datetime=_COMMIT_DT,
-        requirement_text="done text",
-        filepath_globs=["*.py"],
-        status="open",
+    version = create_spec_version_repo(db_session).add(
+        spec_id=spec.id,
+        commit_id=commit.id,
+        title="Title",
+        summary="Summary",
+        spec_md="# s",
+        tasks_md="- t",
+        plan_md="p",
+        created_at=_COMMIT_DT,
+        status=VersionStatus.ACTIVE,
     )
-    create_implementation_at_commit_repo(db_session).upsert_evaluation(
-        requirement_version_id=rv_done.id,
-        evaluation_commit_sha=rv_done.commit_sha,
+    item = create_spec_item_repo(db_session).add(
+        spec_version_id=version.id,
+        local_key="FR-1",
+        item_type=SpecItemType.FUNCTIONAL_BEHAVIOR,
+        text="Greets users",
+        source_quote="greets",
+        importance=SpecItemImportance.MUST,
+        success_criteria=["prints hello"],
+        failure_criteria=["no output"],
+    )
+    implementation = create_implementation_at_commit_repo(db_session).upsert_evaluation(
+        spec_item_id=item.id,
+        commit_id=commit.id,
         implemented=True,
-        summary="",
+        summary="done",
         gaps=[],
+        confidence=0.9,
     )
-    create_requirement_version_repo(db_session).add(
-        requirement_id=r_open.id,
-        commit_sha="b" * 40,
-        commit_datetime=_COMMIT_DT,
-        requirement_text="open text",
-        filepath_globs=["*.py"],
-        status="open",
+    artifact = create_artifact_repo(db_session).add(filepath="src/main.py")
+    artifact_version = create_artifact_version_repo(db_session).add(
+        artifact_id=artifact.id,
+        commit_id=commit.id,
+        status=VersionStatus.ACTIVE.value,
+        file_content="print('hello')",
+    )
+    create_implements_repo(db_session).upsert_evidence(
+        implementation_at_commit_id=implementation.id,
+        artifact_version_id=artifact_version.id,
+        evidence_file="src/main.py",
+        evidence_line_number=1,
+        evidence_snippet="print('hello')",
+        evidence_relevance="prints greeting",
     )
     db_session.flush()
 
-    detail = catalog_client.get(f"/repos/{gid}/specs/{spec.id}")
-    assert detail.status_code == 200
-    reqs = {r["paper_id"]: r for r in detail.json()["requirements"]}
-    assert reqs["done"]["has_version"] is True
-    assert reqs["done"]["implemented"] is True
-    assert reqs["open"]["has_version"] is True
-    assert reqs["open"]["implemented"] is None
+    resp = catalog_client.get(f"/repos/{gid}/specs/{spec.id}/tree")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["paper_id"] == "paper-2"
+    assert len(body["versions"]) == 1
+    version_body = body["versions"][0]
+    assert version_body["title"] == "Title"
+    assert version_body["commit_message"] == "add feature"
+    assert len(version_body["items"]) == 1
+    item_body = version_body["items"][0]
+    assert item_body["local_key"] == "FR-1"
+    assert item_body["item_type"] == "functional_behavior"
+    assert item_body["importance"] == "must"
+    assert item_body["success_criteria"] == ["prints hello"]
+    assert len(item_body["implementations"]) == 1
+    impl_body = item_body["implementations"][0]
+    assert impl_body["implemented"] is True
+    assert impl_body["confidence"] == 0.9
+    assert len(impl_body["artifacts"]) == 1
+    assert impl_body["artifacts"][0]["filepath"] == "src/main.py"
+    assert impl_body["artifacts"][0]["evidence_line_number"] == 1
 
 
 def test_catalog_unknown_repo_404(catalog_client: TestClient) -> None:
@@ -208,7 +213,148 @@ def test_catalog_unknown_repo_404(catalog_client: TestClient) -> None:
     assert r.status_code == 404
 
 
-def test_spec_detail_wrong_repo_404(catalog_client: TestClient, db_session: Session) -> None:
+def test_spec_view_returns_latest_version_with_spans(
+    catalog_client: TestClient, db_session: Session
+) -> None:
+    gid = create_git_repo_repo(db_session).add(
+        name="view-repo",
+        url="https://example.test/view.git",
+        cursor_position="a" * 40,
+        location="/tmp/view",
+    ).id
+    commit = create_commit_repo(db_session).get_or_create(
+        repo_id=gid,
+        commit_sha="d" * 40,
+        commit_message="initial spec",
+        committed_at=_COMMIT_DT,
+    )
+    spec = create_spec_repo(db_session).add(paper_id="paper-view", repo_id=gid)
+    version = create_spec_version_repo(db_session).add(
+        spec_id=spec.id,
+        commit_id=commit.id,
+        title="Greeting spec",
+        summary="Says hello",
+        spec_md="# Greeting\n\nThe system shall greet users on startup.",
+        tasks_md="- [ ] Greet users on startup",
+        plan_md="## Plan\n\nImplement greeting on startup.",
+        created_at=_COMMIT_DT,
+        status=VersionStatus.ACTIVE,
+    )
+    create_spec_item_repo(db_session).add(
+        spec_version_id=version.id,
+        local_key="FR-1",
+        item_type=SpecItemType.FUNCTIONAL_BEHAVIOR,
+        text="Greets users on startup",
+        source_quote="greet users on startup",
+        importance=SpecItemImportance.MUST,
+        success_criteria=["prints hello"],
+        failure_criteria=[],
+    )
+    db_session.flush()
+
+    resp = catalog_client.get(f"/repos/{gid}/specs/{spec.id}/view")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["paper_id"] == "paper-view"
+    assert body["version"]["commit_sha"] == "d" * 40
+    assert body["version"]["spec_md"].startswith("# Greeting")
+    assert body["version"]["tasks_md"] is not None
+    assert body["version"]["plan_md"] is not None
+    assert body["summary"]["total_items"] == 1
+    assert body["summary"]["status"] == "unknown"
+    assert len(body["items"]) == 1
+    item = body["items"][0]
+    assert item["local_key"] == "FR-1"
+    assert item["spans"]["spec"] is not None
+    assert item["spans"]["spec"]["start"] < item["spans"]["spec"]["end"]
+    assert item["spans"]["tasks"] is not None
+    assert item["spans"]["plan"] is not None
+
+
+def test_spec_view_unknown_commit_404(catalog_client: TestClient, db_session: Session) -> None:
+    gid = create_git_repo_repo(db_session).add(
+        name="view-repo-2",
+        url="https://example.test/view2.git",
+        cursor_position="a" * 40,
+        location="/tmp/view2",
+    ).id
+    spec = create_spec_repo(db_session).add(paper_id="paper-view-2", repo_id=gid)
+    resp = catalog_client.get(
+        f"/repos/{gid}/specs/{spec.id}/view",
+        params={"commit_sha": "f" * 40},
+    )
+    assert resp.status_code == 404
+
+
+def test_repo_dashboard_returns_summary_and_specs(
+    catalog_client: TestClient, db_session: Session
+) -> None:
+    gid = create_git_repo_repo(db_session).add(
+        name="dash-repo",
+        url="https://example.test/dash.git",
+        cursor_position="e" * 40,
+        location="/tmp/dash",
+    ).id
+    commit = create_commit_repo(db_session).get_or_create(
+        repo_id=gid,
+        commit_sha="e" * 40,
+        commit_message="initial",
+        committed_at=_COMMIT_DT,
+    )
+    spec = create_spec_repo(db_session).add(paper_id="auth-flow", repo_id=gid)
+    version = create_spec_version_repo(db_session).add(
+        spec_id=spec.id,
+        commit_id=commit.id,
+        title="Auth",
+        summary="Login flow",
+        spec_md="# Auth",
+        tasks_md=None,
+        plan_md=None,
+        created_at=_COMMIT_DT,
+        status=VersionStatus.ACTIVE,
+    )
+    item = create_spec_item_repo(db_session).add(
+        spec_version_id=version.id,
+        local_key="FR-1",
+        item_type=SpecItemType.FUNCTIONAL_BEHAVIOR,
+        text="Users can log in",
+        source_quote="log in",
+        importance=SpecItemImportance.MUST,
+        success_criteria=[],
+        failure_criteria=[],
+    )
+    create_implementation_at_commit_repo(db_session).upsert_evaluation(
+        spec_item_id=item.id,
+        commit_id=commit.id,
+        implemented=True,
+        summary="done",
+        gaps=[],
+        confidence=0.95,
+    )
+    db_session.flush()
+
+    resp = catalog_client.get(f"/repos/{gid}/dashboard")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["repo_name"] == "dash-repo"
+    assert body["summary"]["specs_tracked"] == 1
+    assert body["summary"]["coverage_percent"] == 100.0
+    assert body["specs"][0]["status"] == "good"
+
+    sidebar = catalog_client.get(f"/repos/{gid}/sidebar")
+    assert sidebar.status_code == 200
+    sidebar_spec = sidebar.json()["specs"][0]
+    assert sidebar_spec["title"] == "Auth"
+    assert len(sidebar_spec["versions"]) == 1
+    assert sidebar_spec["versions"][0]["status"] == "good"
+
+
+def test_repo_dashboard_unknown_repo_404(catalog_client: TestClient) -> None:
+    resp = catalog_client.get("/repos/999999999/dashboard")
+    assert resp.status_code == 404
+
+
+def test_spec_tree_wrong_repo_404(catalog_client: TestClient, db_session: Session) -> None:
     g1 = create_git_repo_repo(db_session).add(
         name="g1",
         url="https://example.test/g1.git",
@@ -222,5 +368,5 @@ def test_spec_detail_wrong_repo_404(catalog_client: TestClient, db_session: Sess
         location="/tmp/g2",
     ).id
     spec = create_spec_repo(db_session).add(paper_id="p", repo_id=g1)
-    r = catalog_client.get(f"/repos/{g2}/specs/{spec.id}")
+    r = catalog_client.get(f"/repos/{g2}/specs/{spec.id}/tree")
     assert r.status_code == 404

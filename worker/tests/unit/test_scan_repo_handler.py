@@ -1,9 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from unittest.mock import MagicMock
 
-import pytest
 from git import Repo
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
@@ -11,15 +9,11 @@ from sqlalchemy.orm import Session
 from specvsreality_messages import ScanRepoMessage
 from specvsreality_repositories.models import Base, GitRepo
 from specvsreality_worker.git_adapter import GitAdapter
+from specvsreality_worker.config import WorkerSettings
 from specvsreality_worker.handlers.scan_repo import ScanRepoHandler, _clone_url_with_optional_token
 
 
-def test_constructor_rejects_null_spec_merge_factory(tmp_path: Path) -> None:
-    with pytest.raises(ValueError, match="must not be None"):
-        ScanRepoHandler(clone_root=tmp_path, spec_merge_factory=None)  # type: ignore[arg-type]
-
-
-def test_scan_repo_clones_and_updates_db(tmp_path: Path, monkeypatch) -> None:
+def test_scan_repo_clones_and_updates_db(tmp_path: Path) -> None:
     source_repo_path = tmp_path / "source"
     source_repo_path.mkdir()
     source_repo = Repo.init(str(source_repo_path))
@@ -46,20 +40,20 @@ def test_scan_repo_clones_and_updates_db(tmp_path: Path, monkeypatch) -> None:
         repo_id = row.id
 
     clone_root = tmp_path / "clones"
-    monkeypatch.setenv("DATABASE_URL", db_url)
+    settings = WorkerSettings(database_url=db_url)
 
     scanned: list[str] = []
 
     class _RecordingWalker:
-        def __init__(self, adapter, repo_id: int, session: Session) -> None:
+        def __init__(self, adapter, repo_id: int, session: Session, _settings: WorkerSettings) -> None:
             pass
 
         def scan_commit(self, commit_sha: str) -> None:
             scanned.append(commit_sha)
 
     handler = ScanRepoHandler(
+        settings=settings,
         clone_root=clone_root,
-        spec_merge_factory=lambda _session, _adapter: MagicMock(),
         commit_walker_factory=_RecordingWalker,
     )
     handler.handle(ScanRepoMessage(repo_id=str(repo_id)))
@@ -81,15 +75,14 @@ def test_scan_repo_clones_and_updates_db(tmp_path: Path, monkeypatch) -> None:
     assert scanned == all_shas[1:]
 
 
-def test_clone_url_uses_token_for_https(monkeypatch) -> None:
-    monkeypatch.setenv("GIT_CLONE_TOKEN", "secret-token")
-    monkeypatch.delenv("GIT_CLONE_USERNAME", raising=False)
-    url = _clone_url_with_optional_token("https://github.com/org/repo.git")
+def test_clone_url_uses_token_for_https() -> None:
+    settings = WorkerSettings(git_clone_token="secret-token")
+    url = _clone_url_with_optional_token("https://github.com/org/repo.git", settings)
     assert url == "https://x-access-token:secret-token@github.com/org/repo.git"
 
 
-def test_clone_url_keeps_original_when_credentials_already_present(monkeypatch) -> None:
-    monkeypatch.setenv("GIT_CLONE_TOKEN", "secret-token")
+def test_clone_url_keeps_original_when_credentials_already_present() -> None:
+    settings = WorkerSettings(git_clone_token="secret-token")
     original = "https://alice:abc@github.com/org/repo.git"
-    assert _clone_url_with_optional_token(original) == original
+    assert _clone_url_with_optional_token(original, settings) == original
 
