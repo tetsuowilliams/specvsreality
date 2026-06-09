@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 from specvsreality_api.config import Settings, get_settings
 from specvsreality_api.deps.session import get_session
 from specvsreality_api.messaging.publisher import MessagePublisher, PikaMessagePublisher
-from specvsreality_messages import InitRepoMessage
+from specvsreality_messages import InitRepoMessage, WindToHeadMessage
 from specvsreality_repositories.models.git_repo import GitRepo
 from specvsreality_repositories.repos import GitRepoRepo
 
@@ -40,6 +40,10 @@ class CreateRepoRequest(BaseModel):
 class CreateRepoResponse(BaseModel):
     queued: bool = True
     repo: RepoListItem
+
+
+class WindToHeadResponse(BaseModel):
+    queued: bool = True
 
 
 def get_publisher() -> MessagePublisher:
@@ -88,3 +92,22 @@ async def get_repo(
     if row is None:
         raise HTTPException(status_code=404, detail=f"repo not found: {repo_id}")
     return _to_item(row)
+
+
+@router.post("/repos/{repo_id}/wind-to-head", response_model=WindToHeadResponse)
+async def post_repo_wind_to_head(
+    repo_id: int,
+    session: Annotated[Session, Depends(get_session)],
+    settings: Annotated[Settings, Depends(get_settings)],
+    publisher: Annotated[MessagePublisher, Depends(get_publisher)],
+) -> WindToHeadResponse:
+    row = GitRepoRepo(session).get_by_id(repo_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail=f"repo not found: {repo_id}")
+    if row.clone_error:
+        raise HTTPException(status_code=400, detail="repository initialization failed")
+    if not row.cursor_position:
+        raise HTTPException(status_code=400, detail="repository not initialized")
+    message = WindToHeadMessage(repo_id=str(repo_id))
+    await publisher.publish(message.model_dump_json().encode("utf-8"), settings)
+    return WindToHeadResponse()

@@ -94,3 +94,32 @@ def test_get_repo_by_id(repos_app: tuple[FastAPI, CapturePublisher, Engine]) -> 
 
         missing = client.get("/repos/999999999")
         assert missing.status_code == 404
+
+
+def test_wind_to_head_queues_message(repos_app: tuple[FastAPI, CapturePublisher, Engine]) -> None:
+    app, cap, engine = repos_app
+    with TestClient(app) as client:
+        create = client.post("/repos", json={"name": "repo-a", "url": "https://example.test/repo-a.git"})
+        assert create.status_code == 200
+        repo_id = create.json()["repo"]["id"]
+
+        not_ready = client.post(f"/repos/{repo_id}/wind-to-head")
+        assert not_ready.status_code == 400
+
+        with Session(bind=engine) as session:
+            row = session.get(GitRepo, repo_id)
+            assert row is not None
+            row.cursor_position = "abc123def456"
+            row.location = "/tmp/repo-a"
+            session.commit()
+
+        queued = client.post(f"/repos/{repo_id}/wind-to-head")
+        assert queued.status_code == 200
+        assert queued.json()["queued"] is True
+
+        missing = client.post("/repos/999999999/wind-to-head")
+        assert missing.status_code == 404
+
+    assert len(cap.bodies) == 2
+    assert b'"message_type":"init_repo"' in cap.bodies[0]
+    assert b'"message_type":"wind_to_head"' in cap.bodies[1]

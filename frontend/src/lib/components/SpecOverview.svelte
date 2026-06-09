@@ -83,7 +83,7 @@
 	{#if mandatoryGaps.length > 0}
 		<section class="alert-panel">
 			<header>
-				<h2>Mandatory gaps</h2>
+				<h2>Gaps</h2>
 				<p>Must-have items judged <strong>not implemented</strong> at the latest evaluation.</p>
 			</header>
 			<div class="item-cards">

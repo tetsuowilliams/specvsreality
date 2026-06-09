@@ -1,7 +1,10 @@
 <script lang="ts">
 	import SpecSidebar from '$lib/components/SpecSidebar.svelte';
+	import { getAppContext } from '$lib/appContext';
 	import { getRepo, type Repo } from '$lib/api/repos';
 	import { setRepoContext } from '$lib/repoContext';
+
+	const app = getAppContext();
 
 	let { data, children }: { data: { id: string }; children: import('svelte').Snippet } = $props();
 
@@ -19,6 +22,7 @@
 		repoError = null;
 		try {
 			repo = await getRepo(data.id);
+			await app.refreshRepos();
 		} catch (e) {
 			repoError = e instanceof Error ? e.message : 'Failed to load repository';
 			repo = null;

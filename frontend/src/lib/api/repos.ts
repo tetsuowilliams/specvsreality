@@ -13,6 +13,10 @@ type CreateRepoResponse = {
 	repo: Repo;
 };
 
+type WindToHeadResponse = {
+	queued: boolean;
+};
+
 export async function listRepos(): Promise<Repo[]> {
 	const res = await fetch(`${publicApiBaseUrl()}/repos`);
 	if (!res.ok) {
@@ -42,4 +46,15 @@ export async function getRepo(repoId: string | number): Promise<Repo> {
 		throw new Error(text || `HTTP ${res.status}`);
 	}
 	return (await res.json()) as Repo;
+}
+
+export async function windToHead(repoId: string | number): Promise<WindToHeadResponse> {
+	const res = await fetch(`${publicApiBaseUrl()}/repos/${repoId}/wind-to-head`, {
+		method: 'POST'
+	});
+	if (!res.ok) {
+		const text = await res.text();
+		throw new Error(text || `HTTP ${res.status}`);
+	}
+	return (await res.json()) as WindToHeadResponse;
 }

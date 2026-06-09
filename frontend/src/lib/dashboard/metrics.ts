@@ -26,7 +26,7 @@ export const DASHBOARD_METRICS: Record<string, MetricHelp> = {
 			'Calculated as implemented ÷ evaluated for items marked must or should, using each item’s most recent evaluation. Optional and context items are excluded.'
 	},
 	missing: {
-		label: 'Mandatory gaps',
+		label: 'Gaps',
 		short: 'Must-have spec items judged not implemented.',
 		detail:
 			'Counts mandatory (must) items whose latest evaluation returned implemented = false. These are requirements the codebase is believed to lack—not unevaluated items.'
