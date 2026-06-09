@@ -15,12 +15,7 @@
 		error = null;
 		try {
 			sidebar = await fetchRepoSidebar(repoId);
-			const nextExpanded: Record<number, boolean> = {};
-			const activeSpecId = $page.url.pathname.match(/\/spec\/(\d+)/)?.[1];
-			for (const spec of sidebar.specs) {
-				nextExpanded[spec.id] = activeSpecId === String(spec.id) || sidebar.specs.length <= 6;
-			}
-			expanded = nextExpanded;
+			expanded = Object.fromEntries(sidebar.specs.map((spec) => [spec.id, true]));
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'Failed to load specs';
 			sidebar = null;
