@@ -25,7 +25,7 @@ describe('postHelloWorld', () => {
 		expect(r).toEqual({ queued: true });
 		const fetchMock = vi.mocked(globalThis.fetch);
 		expect(fetchMock).toHaveBeenCalledWith(
-			'http://localhost:8000/hello-world',
+			'http://localhost:8800/hello-world',
 			expect.objectContaining({
 				method: 'POST',
 				headers: expect.objectContaining({

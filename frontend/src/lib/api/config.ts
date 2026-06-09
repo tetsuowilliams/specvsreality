@@ -2,6 +2,6 @@
 export function publicApiBaseUrl(): string {
 	const raw = import.meta.env.PUBLIC_API_BASE_URL;
 	const base =
-		typeof raw === 'string' && raw.trim().length > 0 ? raw.trim() : 'http://localhost:8000';
+		typeof raw === 'string' && raw.trim().length > 0 ? raw.trim() : 'http://localhost:8800';
 	return base.replace(/\/$/, '');
 }

@@ -5,7 +5,7 @@ WORKDIR /app
 COPY package.json package-lock.json .npmrc ./
 RUN npm ci --ignore-scripts
 COPY . .
-ARG PUBLIC_API_BASE_URL=http://localhost:8000
+ARG PUBLIC_API_BASE_URL=http://localhost:8800
 ENV PUBLIC_API_BASE_URL=${PUBLIC_API_BASE_URL}
 RUN npx svelte-kit sync && npm run build
 

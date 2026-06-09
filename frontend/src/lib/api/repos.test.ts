@@ -32,7 +32,7 @@ describe('repos api', () => {
 
 		const repos = await listRepos();
 		expect(repos).toHaveLength(1);
-		expect(fetchMock).toHaveBeenCalledWith('http://localhost:8000/repos');
+		expect(fetchMock).toHaveBeenCalledWith('http://localhost:8800/repos');
 	});
 
 	it('POSTs repo creation payload', async () => {
@@ -56,7 +56,7 @@ describe('repos api', () => {
 		const result = await createRepo('repo-a', 'https://example.test/repo-a.git');
 		expect(result.queued).toBe(true);
 		expect(fetchMock).toHaveBeenCalledWith(
-			'http://localhost:8000/repos',
+			'http://localhost:8800/repos',
 			expect.objectContaining({
 				method: 'POST',
 				headers: expect.objectContaining({ 'Content-Type': 'application/json' }),
@@ -83,6 +83,6 @@ describe('repos api', () => {
 		const repo = await getRepo('1');
 		expect(repo.id).toBe(1);
 		expect(repo.cursor_position).toBe('abc');
-		expect(fetchMock).toHaveBeenCalledWith('http://localhost:8000/repos/1');
+		expect(fetchMock).toHaveBeenCalledWith('http://localhost:8800/repos/1');
 	});
 });

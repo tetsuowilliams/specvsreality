@@ -10,9 +10,9 @@ npm ci
 npm run dev
 ```
 
-Dev server: http://localhost:5174 (port 5173 is reserved for Opik).
+Dev server: http://localhost:5180 (port 5173 is reserved for Opik).
 
-Set `PUBLIC_API_BASE_URL` in `.env` (default `http://localhost:8000`).
+Set `PUBLIC_API_BASE_URL` in `.env` (default `http://localhost:8800`).
 
 ## Scripts
 

@@ -12,12 +12,12 @@ cd specvsreality
 ./scripts/dev.sh
 ```
 
-Then open **http://localhost:8080**.
+Then open **http://localhost:9080**.
 
 | Service | URL | Default credentials |
 |---------|-----|---------------------|
-| Frontend | http://localhost:8080 | — |
-| API | http://localhost:8000 | — |
+| Frontend | http://localhost:9080 | — |
+| API | http://localhost:8800 | — |
 | RabbitMQ management | http://localhost:15672 | guest / guest |
 | Grafana | http://localhost:3000 | admin / admin |
 

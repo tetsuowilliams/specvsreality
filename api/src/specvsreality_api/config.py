@@ -17,12 +17,12 @@ class Settings(BaseSettings):
 
     cors_origins: list[str] = Field(
         default_factory=lambda: [
-            "http://localhost:5173",
-            "http://localhost:5174",
-            "http://127.0.0.1:5173",
-            "http://127.0.0.1:5174",
-            "http://localhost:8080",
-            "http://127.0.0.1:8080",
+            "http://localhost:5180",
+            "http://127.0.0.1:5180",
+            "http://localhost:9080",
+            "http://127.0.0.1:9080",
+            "http://localhost:4173",
+            "http://127.0.0.1:4173",
             "http://localhost:3000",
         ],
         description="Allowed browser origins (JSON array or comma-separated via env).",
@@ -42,12 +42,12 @@ class Settings(BaseSettings):
     def parse_cors(cls, v: object) -> list[str]:
         if v is None or v == "":
             return [
-                "http://localhost:5173",
-                "http://localhost:5174",
-                "http://127.0.0.1:5173",
-                "http://127.0.0.1:5174",
-                "http://localhost:8080",
-                "http://127.0.0.1:8080",
+                "http://localhost:5180",
+                "http://127.0.0.1:5180",
+                "http://localhost:9080",
+                "http://127.0.0.1:9080",
+                "http://localhost:4173",
+                "http://127.0.0.1:4173",
             ]
         if isinstance(v, list):
             return [str(x) for x in v]

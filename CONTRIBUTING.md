@@ -27,7 +27,7 @@ export DATABASE_URL=postgresql+psycopg://specvsreality:specvsreality@localhost:5
 alembic -c repositories/alembic.ini upgrade head
 
 # Terminal 1 — API
-uv run uvicorn specvsreality_api.main:app --reload --port 8000
+uv run uvicorn specvsreality_api.main:app --reload --port 8800
 
 # Terminal 2 — worker
 uv run specvsreality-worker
@@ -36,7 +36,7 @@ uv run specvsreality-worker
 cd frontend && cp .env.example .env && npm ci && npm run dev
 ```
 
-Frontend dev server: http://localhost:5174
+Frontend dev server: http://localhost:5180
 
 #### Environment file locations
 

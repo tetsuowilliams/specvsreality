@@ -38,7 +38,7 @@ services:
       context: .
       dockerfile: api/Dockerfile
     ports:
-      - "8000:8000"
+      - "8800:8000"
     environment:
       DATABASE_URL: postgresql+psycopg://specvsreality:specvsreality@postgres:5432/specvsreality
       RABBITMQ_HOST: rabbitmq
@@ -47,7 +47,7 @@ services:
       RABBITMQ_USERNAME: guest
       RABBITMQ_PASSWORD: guest
       RABBITMQ_QUEUE_NAME: messages
-      CORS_ORIGINS: '["http://localhost:8080","http://127.0.0.1:8080","http://localhost:5173","http://127.0.0.1:5173","http://localhost:5174","http://127.0.0.1:5174","http://localhost:4173","http://127.0.0.1:4173"]'
+      CORS_ORIGINS: '["http://localhost:9080","http://127.0.0.1:9080","http://localhost:5180","http://127.0.0.1:5180","http://localhost:4173","http://127.0.0.1:4173"]'
     depends_on:
       postgres:
         condition: service_healthy
@@ -89,9 +89,9 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
       args:
-        PUBLIC_API_BASE_URL: http://localhost:8000
+        PUBLIC_API_BASE_URL: http://localhost:8800
     ports:
-      - "8080:80"
+      - "9080:80"
     depends_on:
       - api
 

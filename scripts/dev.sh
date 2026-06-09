@@ -34,7 +34,7 @@ docker compose up --build -d
 echo "Waiting for API health..."
 TRIES=0
 MAX_TRIES=60
-until curl -sf http://localhost:8000/health >/dev/null 2>&1; do
+until curl -sf http://localhost:8800/health >/dev/null 2>&1; do
   TRIES=$((TRIES + 1))
   if [ "$TRIES" -ge "$MAX_TRIES" ]; then
     echo "error: API did not become healthy within ${MAX_TRIES}s" >&2
@@ -48,8 +48,8 @@ cat <<EOF
 
 SpecVsReality is running.
 
-  Frontend:  http://localhost:8080
-  API:       http://localhost:8000  (health: /health)
+  Frontend:  http://localhost:9080
+  API:       http://localhost:8800  (health: /health)
   RabbitMQ:  http://localhost:15672  (guest / guest)
   Grafana:   http://localhost:3000   (admin / admin)
 
