@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from collections.abc import Sequence
 
@@ -53,6 +54,23 @@ class ImplementsEvaluation:
         candidates: Sequence[ResolvedCandidate],
         metrics: AgentMetricsRecorder | None = None,
     ) -> None:
+        asyncio.run(
+            self._evaluate_async(
+                commit=commit,
+                work=work,
+                candidates=candidates,
+                metrics=metrics,
+            ),
+        )
+
+    async def _evaluate_async(
+        self,
+        *,
+        commit: CommitContext,
+        work: SpecWork,
+        candidates: Sequence[ResolvedCandidate],
+        metrics: AgentMetricsRecorder | None = None,
+    ) -> None:
         if not work.spec_items:
             return
 
@@ -82,16 +100,34 @@ class ImplementsEvaluation:
         ]
 
         batch_size = self._settings.implements_agent_batch_size
-        for batch in _chunk(eval_items, batch_size):
-            evaluations = self._implements_agent.evaluate_batch(
-                spec_label=work.spec_label,
-                spec_items=batch,
-                candidates=candidate_contents,
-                spec_md=work.spec_md,
-                tasks_md=work.tasks_md,
-                plan_md=work.plan_md,
-                metrics=metrics,
-            )
+        batches = _chunk(eval_items, batch_size)
+        concurrency = self._settings.implements_agent_concurrent_batches
+        semaphore = asyncio.Semaphore(concurrency)
+
+        async def run_batch(batch: list[SpecItemForEvaluation]) -> list[SpecItemEvaluation]:
+            async with semaphore:
+                return await self._implements_agent.evaluate_batch(
+                    spec_label=work.spec_label,
+                    spec_items=batch,
+                    candidates=candidate_contents,
+                    spec_md=work.spec_md,
+                    tasks_md=work.tasks_md,
+                    plan_md=work.plan_md,
+                    metrics=metrics,
+                )
+
+        logger.info(
+            "implements evaluate start spec=%s items=%s batches=%s batch_size=%s concurrency=%s",
+            work.spec_label,
+            len(eval_items),
+            len(batches),
+            batch_size,
+            concurrency,
+        )
+
+        batch_results = await asyncio.gather(*(run_batch(batch) for batch in batches))
+
+        for evaluations in batch_results:
             for evaluation in evaluations:
                 if evaluation.spec_item_id not in valid_item_ids:
                     logger.warning(

@@ -169,8 +169,12 @@ class WorkerSettings(BaseSettings):
 
     # --- Implements agent limits ---
     implements_agent_batch_size: int = Field(
-        default=5,
+        default=10,
         validation_alias="IMPLEMENTS_AGENT_BATCH_SIZE",
+    )
+    implements_agent_concurrent_batches: int = Field(
+        default=10,
+        validation_alias="IMPLEMENTS_AGENT_CONCURRENT_BATCHES",
     )
     implements_agent_timeout_seconds: float = Field(
         default=600.0,
@@ -239,9 +243,9 @@ class WorkerSettings(BaseSettings):
     def _parse_bool_flags(cls, value: object) -> bool:
         return _parse_truthy(value)
 
-    @field_validator("implements_agent_batch_size")
+    @field_validator("implements_agent_batch_size", "implements_agent_concurrent_batches")
     @classmethod
-    def _clamp_batch_size(cls, value: int) -> int:
+    def _clamp_positive_int(cls, value: int) -> int:
         return max(1, value)
 
     @property
