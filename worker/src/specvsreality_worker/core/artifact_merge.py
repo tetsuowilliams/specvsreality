@@ -7,8 +7,13 @@ import logging
 from specvsreality_repositories.repos import ArtifactRepo, ArtifactVersionRepo
 from specvsreality_repositories.repos.enums import VersionStatus
 from specvsreality_worker.core.commit_context import CommitContext
-from specvsreality_worker.core.spec_detection import ArtifactType
-from specvsreality_worker.git_adapter import GitAdapter, GitCommitPathInformation, PathChangeState
+from specvsreality_worker.core.spec_detection import ArtifactType, SpecDetection
+from specvsreality_worker.git_adapter import (
+    GitAdapter,
+    GitAdapterError,
+    GitCommitPathInformation,
+    PathChangeState,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -22,10 +27,12 @@ class ArtifactMerge:
         git_adapter: GitAdapter,
         artifact_repo: ArtifactRepo,
         artifact_version_repo: ArtifactVersionRepo,
+        spec_detection: SpecDetection | None = None,
     ) -> None:
         self._git_adapter = git_adapter
         self._artifact_repo = artifact_repo
         self._artifact_version_repo = artifact_version_repo
+        self._spec_detection = spec_detection or SpecDetection()
 
     def merge_artifacts(self, *, changes: GitCommitPathInformation, commit: CommitContext) -> None:
         merged = 0
@@ -34,6 +41,17 @@ class ArtifactMerge:
                 continue
 
             relpath = path.path
+            if path.state != PathChangeState.DELETED and not self._spec_detection.is_text_file(
+                relpath,
+            ):
+                logger.debug(
+                    "merge_artifacts skip binary repo_id=%s commit=%s path=%s",
+                    commit.repo_id,
+                    commit.commit_sha[:7],
+                    relpath,
+                )
+                continue
+
             artifact = self._artifact_repo.get_by_filepath(filepath=relpath)
             if artifact is None:
                 artifact = self._artifact_repo.add(filepath=relpath)
@@ -41,12 +59,22 @@ class ArtifactMerge:
             if path.state == PathChangeState.DELETED:
                 content = ""
                 status = VersionStatus.DELETED
-            elif path.state == PathChangeState.NEW:
-                content = self._git_adapter.file_at_commit(commit.commit_sha, relpath)
-                status = VersionStatus.ACTIVE
             else:
-                content = self._git_adapter.file_at_commit(commit.commit_sha, relpath)
-                status = VersionStatus.UPDATED
+                try:
+                    content = self._git_adapter.file_at_commit(commit.commit_sha, relpath)
+                except GitAdapterError:
+                    logger.warning(
+                        "merge_artifacts skip non-utf8 repo_id=%s commit=%s path=%s",
+                        commit.repo_id,
+                        commit.commit_sha[:7],
+                        relpath,
+                    )
+                    continue
+                status = (
+                    VersionStatus.ACTIVE
+                    if path.state == PathChangeState.NEW
+                    else VersionStatus.UPDATED
+                )
 
             self._artifact_version_repo.add(
                 artifact_id=artifact.id,

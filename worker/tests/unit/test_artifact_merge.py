@@ -12,7 +12,12 @@ from specvsreality_repositories.repos.enums import VersionStatus
 from specvsreality_worker.core.artifact_merge import ArtifactMerge
 from specvsreality_worker.core.commit_context import CommitContext
 from specvsreality_worker.core.spec_detection import ArtifactType
-from specvsreality_worker.git_adapter import ChangedPath, GitCommitPathInformation, PathChangeState
+from specvsreality_worker.git_adapter import (
+    ChangedPath,
+    GitAdapterError,
+    GitCommitPathInformation,
+    PathChangeState,
+)
 
 
 @pytest.fixture
@@ -131,6 +136,41 @@ def test_merge_artifacts_records_deleted_code_with_empty_content(
         status=VersionStatus.DELETED.value,
         file_content="",
     )
+
+
+def test_merge_artifacts_skips_binary_code_files(
+    artifact_merge: ArtifactMerge,
+    commit: CommitContext,
+) -> None:
+    artifact_merge.merge_artifacts(
+        changes=GitCommitPathInformation(
+            paths=[_code_change("frontend/src/assets/hero.png", PathChangeState.NEW)]
+        ),
+        commit=commit,
+    )
+
+    artifact_merge._artifact_repo.add.assert_not_called()
+    artifact_merge._artifact_version_repo.add.assert_not_called()
+    artifact_merge._git_adapter.file_at_commit.assert_not_called()
+
+
+def test_merge_artifacts_skips_non_utf8_text_files(
+    artifact_merge: ArtifactMerge,
+    commit: CommitContext,
+) -> None:
+    artifact_merge._git_adapter.file_at_commit.side_effect = GitAdapterError(
+        "File is not valid UTF-8: 'data.bin'",
+    )
+
+    artifact_merge.merge_artifacts(
+        changes=GitCommitPathInformation(
+            paths=[_code_change("data.bin", PathChangeState.MODIFIED)]
+        ),
+        commit=commit,
+    )
+
+    artifact_merge._artifact_repo.add.assert_not_called()
+    artifact_merge._artifact_version_repo.add.assert_not_called()
 
 
 def test_merge_artifacts_records_every_changed_code_path(

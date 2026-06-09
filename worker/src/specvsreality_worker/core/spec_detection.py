@@ -14,6 +14,25 @@ class SpecDetection:
     SPEC_FILENAMES: ClassVar[frozenset[str]] = frozenset({"plan.md", "tasks.md", "spec.md"})
     SPECS_DIR: ClassVar[str] = "specs"
     IGNORED_DIR_SEGMENTS: ClassVar[frozenset[str]] = frozenset({".cursor", ".specify", ".skills"})
+    BINARY_FILE_SUFFIXES: ClassVar[frozenset[str]] = frozenset(
+        {
+            ".pdf",
+            ".png",
+            ".jpg",
+            ".jpeg",
+            ".gif",
+            ".webp",
+            ".zip",
+            ".gz",
+            ".tar",
+            ".pyc",
+            ".woff",
+            ".woff2",
+            ".ico",
+            ".mp4",
+            ".mp3",
+        },
+    )
 
     def is_tracked_path(self, relpath: str) -> bool:
         """
@@ -38,3 +57,8 @@ class SpecDetection:
 
     def artifact_type(self, relpath: str) -> ArtifactType:
         return ArtifactType.SPEC if self.is_spec_file(relpath) else ArtifactType.CODE
+
+    def is_text_file(self, relpath: str) -> bool:
+        """Return False for known binary extensions (images, archives, fonts, etc.)."""
+        lower = relpath.replace("\\", "/").lower()
+        return not any(lower.endswith(suffix) for suffix in self.BINARY_FILE_SUFFIXES)

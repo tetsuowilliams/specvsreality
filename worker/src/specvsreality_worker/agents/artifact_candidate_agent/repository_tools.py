@@ -14,30 +14,13 @@ from specvsreality_worker.agents.artifact_candidate_agent.glob import (
     glob_match,
     normalize_relpath,
 )
+from specvsreality_worker.core.spec_detection import SpecDetection
 
 logger = logging.getLogger(__name__)
 
-_BLOCKED_SUFFIXES = frozenset(
-    {
-        ".pdf",
-        ".png",
-        ".jpg",
-        ".jpeg",
-        ".gif",
-        ".webp",
-        ".zip",
-        ".gz",
-        ".tar",
-        ".pyc",
-        ".woff",
-        ".woff2",
-        ".ico",
-        ".mp4",
-        ".mp3",
-    },
-)
-
 T = TypeVar("T")
+
+_spec_detection = SpecDetection()
 
 
 def _label(deps: CommitToolDeps) -> str:
@@ -45,8 +28,7 @@ def _label(deps: CommitToolDeps) -> str:
 
 
 def _is_blocked_path(path: str) -> bool:
-    lower = path.lower()
-    return any(lower.endswith(suffix) for suffix in _BLOCKED_SUFFIXES)
+    return not _spec_detection.is_text_file(path)
 
 
 def _execute_tool(

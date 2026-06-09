@@ -39,6 +39,15 @@ def test_is_tracked_path_includes_specs_and_code_outside_tooling_dirs() -> None:
     assert detection.is_tracked_path("docs/feature.spec.md")
 
 
+def test_is_text_file_rejects_known_binary_extensions() -> None:
+    detection = SpecDetection()
+
+    assert detection.is_text_file("src/main.py")
+    assert detection.is_text_file("README.md")
+    assert not detection.is_text_file("frontend/src/assets/hero.png")
+    assert not detection.is_text_file("docs/report.PDF")
+
+
 def test_is_tracked_path_excludes_tooling_directories() -> None:
     detection = SpecDetection()
 
