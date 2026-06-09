@@ -10,7 +10,6 @@ import opik
 from pydantic_ai import Agent
 
 from specvsreality_repositories.models.enums import AgentName
-
 from specvsreality_worker.agents.implements_agent.models import (
     CandidateArtifactContent,
     ImplementsBatchResult,

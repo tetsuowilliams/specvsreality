@@ -5,7 +5,7 @@ export type Repo = {
 	name: string;
 	url: string;
 	cursor_position: string;
-	location: string;
+	clone_error: string;
 };
 
 type CreateRepoResponse = {

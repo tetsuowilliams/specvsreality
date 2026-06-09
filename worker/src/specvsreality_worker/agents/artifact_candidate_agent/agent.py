@@ -7,9 +7,9 @@ from collections.abc import Sequence
 from typing import TYPE_CHECKING
 
 import opik
-from specvsreality_repositories.models.enums import AgentName
 from pydantic_ai.tool_manager import ToolManager
 
+from specvsreality_repositories.models.enums import AgentName
 from specvsreality_worker.agents.artifact_candidate_agent.agent_builder import (
     build_artifact_candidate_agent,
 )

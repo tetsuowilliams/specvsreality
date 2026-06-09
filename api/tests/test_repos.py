@@ -62,8 +62,9 @@ def test_create_and_list_repos(repos_app: tuple[FastAPI, CapturePublisher, Engin
         payload = create.json()
         assert payload["queued"] is True
         assert payload["repo"]["name"] == "repo-a"
-        assert payload["repo"]["location"] == ""
         assert payload["repo"]["cursor_position"] == ""
+        assert payload["repo"]["clone_error"] == ""
+        assert "location" not in payload["repo"]
 
         listing = client.get("/repos")
         assert listing.status_code == 200
@@ -71,9 +72,10 @@ def test_create_and_list_repos(repos_app: tuple[FastAPI, CapturePublisher, Engin
         assert len(rows) == 1
         assert rows[0]["name"] == "repo-a"
         assert rows[0]["url"] == "https://example.test/repo-a.git"
+        assert rows[0]["clone_error"] == ""
 
     assert len(cap.bodies) == 1
-    assert b'"message_type":"scan_repo"' in cap.bodies[0]
+    assert b'"message_type":"init_repo"' in cap.bodies[0]
 
 
 def test_get_repo_by_id(repos_app: tuple[FastAPI, CapturePublisher, Engine]) -> None:
@@ -88,6 +90,7 @@ def test_get_repo_by_id(repos_app: tuple[FastAPI, CapturePublisher, Engine]) -> 
         body = got.json()
         assert body["id"] == repo_id
         assert body["name"] == "repo-a"
+        assert body["clone_error"] == ""
 
         missing = client.get("/repos/999999999")
         assert missing.status_code == 404

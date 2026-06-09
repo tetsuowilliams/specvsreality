@@ -19,7 +19,13 @@ describe('repos api', () => {
 			ok: true,
 			json: () =>
 				Promise.resolve([
-					{ id: 1, name: 'repo-a', url: 'https://example.test/repo-a.git', cursor_position: '', location: '' }
+					{
+						id: 1,
+						name: 'repo-a',
+						url: 'https://example.test/repo-a.git',
+						cursor_position: '',
+						clone_error: ''
+					}
 				]),
 			text: () => Promise.resolve('')
 		} as Response);
@@ -36,7 +42,13 @@ describe('repos api', () => {
 			json: () =>
 				Promise.resolve({
 					queued: true,
-					repo: { id: 1, name: 'repo-a', url: 'https://example.test/repo-a.git', cursor_position: '', location: '' }
+					repo: {
+						id: 1,
+						name: 'repo-a',
+						url: 'https://example.test/repo-a.git',
+						cursor_position: '',
+						clone_error: ''
+					}
 				}),
 			text: () => Promise.resolve('')
 		} as Response);
@@ -63,14 +75,14 @@ describe('repos api', () => {
 					name: 'repo-a',
 					url: 'https://example.test/repo-a.git',
 					cursor_position: 'abc',
-					location: '/data/1'
+					clone_error: ''
 				}),
 			text: () => Promise.resolve('')
 		} as Response);
 
 		const repo = await getRepo('1');
 		expect(repo.id).toBe(1);
-		expect(repo.location).toBe('/data/1');
+		expect(repo.cursor_position).toBe('abc');
 		expect(fetchMock).toHaveBeenCalledWith('http://localhost:8000/repos/1');
 	});
 });

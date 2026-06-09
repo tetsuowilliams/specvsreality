@@ -39,7 +39,7 @@ class SpecViewItem(BaseModel):
     implementations: list[SpecTreeImplementation]
 
 
-class SpecViewVersion(BaseModel):
+class SpecViewVersionMeta(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     id: int
@@ -48,6 +48,13 @@ class SpecViewVersion(BaseModel):
     committed_at: datetime
     title: str | None
     summary: str | None
+    has_tasks_md: bool
+    has_plan_md: bool
+
+
+class SpecViewMarkdownResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     spec_md: str
     tasks_md: str | None
     plan_md: str | None
@@ -67,11 +74,11 @@ class SpecViewSummary(BaseModel):
     status: str
 
 
-class SpecViewResponse(BaseModel):
+class SpecViewOverviewResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     id: int
     paper_id: str
-    version: SpecViewVersion
+    version: SpecViewVersionMeta
     summary: SpecViewSummary
     items: list[SpecViewItem]

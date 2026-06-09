@@ -11,18 +11,27 @@ from specvsreality_messages.hello_world import (
     HELLO_WORLD_MESSAGE_TYPE,
     HelloWorldMessage,
 )
-from specvsreality_messages.scan_repo import SCAN_REPO_MESSAGE_TYPE, ScanRepoMessage
+from specvsreality_messages.init_repo import INIT_REPO_MESSAGE_TYPE, InitRepoMessage
+from specvsreality_messages.spec_scan import SPEC_SCAN_MESSAGE_TYPE, SpecScanMessage
+from specvsreality_messages.wind_to_head import WIND_TO_HEAD_MESSAGE_TYPE, WindToHeadMessage
 
 # Union of all concrete messages; extend when adding new types.
 WorkerMessage = Annotated[
-    HelloWorldMessage | ScanRepoMessage,
+    HelloWorldMessage | InitRepoMessage | WindToHeadMessage | SpecScanMessage,
     Field(discriminator="message_type"),
 ]
 
 _worker_message_adapter: TypeAdapter[WorkerMessage] = TypeAdapter(WorkerMessage)
 
 # Keep in sync when adding union members (bootstrap checks handlers cover these).
-KNOWN_MESSAGE_TYPES: frozenset[str] = frozenset({HELLO_WORLD_MESSAGE_TYPE, SCAN_REPO_MESSAGE_TYPE})
+KNOWN_MESSAGE_TYPES: frozenset[str] = frozenset(
+    {
+        HELLO_WORLD_MESSAGE_TYPE,
+        INIT_REPO_MESSAGE_TYPE,
+        WIND_TO_HEAD_MESSAGE_TYPE,
+        SPEC_SCAN_MESSAGE_TYPE,
+    }
+)
 
 
 def parse_worker_message(raw: str | bytes) -> WorkerMessage:
@@ -35,8 +44,12 @@ def parse_worker_message(raw: str | bytes) -> WorkerMessage:
 __all__ = [
     "HELLO_WORLD_MESSAGE_TYPE",
     "HelloWorldMessage",
-    "SCAN_REPO_MESSAGE_TYPE",
-    "ScanRepoMessage",
+    "INIT_REPO_MESSAGE_TYPE",
+    "InitRepoMessage",
+    "WIND_TO_HEAD_MESSAGE_TYPE",
+    "WindToHeadMessage",
+    "SPEC_SCAN_MESSAGE_TYPE",
+    "SpecScanMessage",
     "KNOWN_MESSAGE_TYPES",
     "WorkerMessage",
     "parse_worker_message",

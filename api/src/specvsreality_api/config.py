@@ -18,6 +18,9 @@ class Settings(BaseSettings):
     cors_origins: list[str] = Field(
         default_factory=lambda: [
             "http://localhost:5173",
+            "http://localhost:5174",
+            "http://127.0.0.1:5173",
+            "http://127.0.0.1:5174",
             "http://localhost:8080",
             "http://127.0.0.1:8080",
             "http://localhost:3000",
@@ -29,7 +32,7 @@ class Settings(BaseSettings):
     rabbitmq_port: int = Field(default=5672, validation_alias="RABBITMQ_PORT")
     rabbitmq_virtual_host: str = Field(default="/", validation_alias="RABBITMQ_VIRTUAL_HOST")
     rabbitmq_username: str = Field(default="guest", validation_alias="RABBITMQ_USERNAME")
-    rabbitmq_password: str = Field(default="", validation_alias="RABBITMQ_PASSWORD")
+    rabbitmq_password: str = Field(default="guest", validation_alias="RABBITMQ_PASSWORD")
     rabbitmq_queue_name: str = Field(default="messages", validation_alias="RABBITMQ_QUEUE_NAME")
 
     database_url: str = Field(default="", validation_alias="DATABASE_URL")
@@ -40,6 +43,9 @@ class Settings(BaseSettings):
         if v is None or v == "":
             return [
                 "http://localhost:5173",
+                "http://localhost:5174",
+                "http://127.0.0.1:5173",
+                "http://127.0.0.1:5174",
                 "http://localhost:8080",
                 "http://127.0.0.1:8080",
             ]

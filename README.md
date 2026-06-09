@@ -1,44 +1,104 @@
-# BehTool
+# SpecVsReality
 
+Track whether your implementation matches your specifications. SpecVsReality watches Git repositories for `specs/` folders, walks commit history, and uses AI agents to compare specs against the codebase.
 
+## Quick start
 
-## Getting started
+**Prerequisites:** [Docker](https://docs.docker.com/get-docker/) with Compose v2.
 
-To make it easy for you to get started with GitLab, here's a list of recommended next steps.
-
-Already a pro? Just edit this README.md and make it your own. Want to make it easy? [Use the template at the bottom](#editing-this-readme)!
-
-## Add your files
-
-* [Create](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#create-a-file) or [upload](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#upload-a-file) files
-* [Add files using the command line](https://docs.gitlab.com/topics/git/add_files/#add-files-to-a-git-repository) or push an existing Git repository with the following command:
-
-```
-cd existing_repo
-git remote add origin https://prod.gitlab.beta-orionis.com/behtool/behtool.git
-git branch -M main
-git push -uf origin main
+```bash
+git clone https://github.com/tetsuowilliams/specvsreality.git
+cd specvsreality
+./scripts/dev.sh
 ```
 
-## Integrate with your tools
+Then open **http://localhost:8080**.
 
-* [Set up project integrations](https://prod.gitlab.beta-orionis.com/behtool/behtool/-/settings/integrations)
+| Service | URL | Default credentials |
+|---------|-----|---------------------|
+| Frontend | http://localhost:8080 | — |
+| API | http://localhost:8000 | — |
+| RabbitMQ management | http://localhost:15672 | guest / guest |
+| Grafana | http://localhost:3000 | admin / admin |
 
-## Collaborate with your team
+To wipe the database and rebuild from scratch: `./scripts/reset.sh`
 
-* [Invite team members and collaborators](https://docs.gitlab.com/ee/user/project/members/)
-* [Create a new merge request](https://docs.gitlab.com/ee/user/project/merge_requests/creating_merge_requests.html)
-* [Automatically close issues from merge requests](https://docs.gitlab.com/ee/user/project/issues/managing_issues.html#closing-issues-automatically)
-* [Enable merge request approvals](https://docs.gitlab.com/ee/user/project/merge_requests/approvals/)
-* [Set auto-merge](https://docs.gitlab.com/user/project/merge_requests/auto_merge/)
+## First run
 
-## Test and Deploy
+1. Start the stack with `./scripts/dev.sh`.
+2. Open the frontend and **add a repository** (public Git URL).
+3. Set `OPENAI_API_KEY` in `worker/.env` (copied automatically from `worker/.env.example` on first run).
+4. Restart the worker: `docker compose restart worker`
+5. Watch progress: `docker compose logs -f worker`
 
-Use the built-in continuous integration in GitLab.
+The database starts empty — there is no bundled demo data.
 
-* [Get started with GitLab CI/CD](https://docs.gitlab.com/ee/ci/quick_start/)
-* [Analyze your code for known vulnerabilities with Static Application Security Testing (SAST)](https://docs.gitlab.com/ee/user/application_security/sast/)
-* [Deploy to Kubernetes, Amazon EC2, or Amazon ECS using Auto Deploy](https://docs.gitlab.com/ee/topics/autodevops/requirements.html)
-* [Use pull-based deployments for improved Kubernetes management](https://docs.gitlab.com/ee/user/clusters/agent/)
-* [Set up protected environments](https://docs.gitlab.com/ee/ci/environments/protected_environments.html)
+### Repository layout
 
+Tracked repositories must contain specs under `specs/`:
+
+```
+specs/
+  0001-my-feature/
+    spec.md       # required
+    plan.md       # optional
+    tasks.md      # optional
+```
+
+## Architecture
+
+```
+Frontend → API → RabbitMQ → Worker → Git clones
+                ↓              ↓
+             Postgres ←───────┘
+```
+
+When you add a repo, the worker runs a three-stage pipeline:
+
+1. **init_repo** — clone the repository
+2. **wind_to_head** — sync commits and detect spec changes
+3. **spec_scan** — run AI agents to extract specs and find implementation candidates
+
+## Configuration
+
+| File | Purpose |
+|------|---------|
+| `worker/.env` | Worker secrets and AI model settings (required for Docker Compose) |
+| `api/.env.example` | API settings for hybrid local dev |
+| `frontend/.env.example` | `PUBLIC_API_BASE_URL` for native frontend dev |
+
+### Required for AI scanning
+
+- `OPENAI_API_KEY` in `worker/.env`
+
+### Optional
+
+- `GIT_CLONE_TOKEN` — clone private repositories (passed from host shell into compose)
+- `LOGFIRE_TOKEN` or `OPIK_URL_OVERRIDE` — LLM tracing (see `worker/.env.example`)
+
+## Development
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for hybrid local development, running tests, and code style.
+
+### Run tests
+
+```bash
+uv sync
+uv run pytest
+uv run ruff check .
+uv run mypy
+
+cd frontend && npm ci && npm test && npm run check
+```
+
+Integration tests require Docker (testcontainers).
+
+## Security
+
+This project is intended for **local development**. The API has no authentication, and Docker Compose exposes services with default credentials on host ports. **Do not expose the default stack to the public internet.**
+
+See [SECURITY.md](SECURITY.md) for reporting vulnerabilities.
+
+## License
+
+[MIT](LICENSE)

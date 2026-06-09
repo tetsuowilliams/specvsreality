@@ -5,17 +5,17 @@ Revises:
 Create Date: 2026-06-08 00:01:00.000000
 """
 
-from typing import Sequence, Union
+from collections.abc import Sequence
 
-from alembic import op
 import sqlalchemy as sa
+from alembic import op
 from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
 revision: str = "0001"
-down_revision: Union[str, Sequence[str], None] = None
-branch_labels: Union[str, Sequence[str], None] = None
-depends_on: Union[str, Sequence[str], None] = None
+down_revision: str | Sequence[str] | None = None
+branch_labels: str | Sequence[str] | None = None
+depends_on: str | Sequence[str] | None = None
 
 
 SPEC_ITEM_TYPE_VALUES = (
@@ -105,6 +105,7 @@ def upgrade() -> None:
         sa.Column("importance", spec_item_importance, nullable=False),
         sa.Column("success_criteria", postgresql.ARRAY(sa.String()), nullable=False),
         sa.Column("failure_criteria", postgresql.ARRAY(sa.String()), nullable=False),
+        sa.Column("highlight_spans", postgresql.JSONB(astext_type=sa.Text()), nullable=True),
         sa.ForeignKeyConstraint(["spec_version_id"], ["spec_version.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
     )

@@ -11,6 +11,7 @@ from specvsreality_worker.agents.implements_agent.models import (
     SpecItemEvaluation,
     SpecItemForEvaluation,
 )
+
 __all__ = [
     "ArtifactEvidence",
     "CandidateArtifactContent",

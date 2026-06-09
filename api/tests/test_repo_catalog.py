@@ -257,9 +257,9 @@ def test_spec_view_returns_latest_version_with_spans(
     body = resp.json()
     assert body["paper_id"] == "paper-view"
     assert body["version"]["commit_sha"] == "d" * 40
-    assert body["version"]["spec_md"].startswith("# Greeting")
-    assert body["version"]["tasks_md"] is not None
-    assert body["version"]["plan_md"] is not None
+    assert "spec_md" not in body["version"]
+    assert body["version"]["has_tasks_md"] is True
+    assert body["version"]["has_plan_md"] is True
     assert body["summary"]["total_items"] == 1
     assert body["summary"]["status"] == "unknown"
     assert len(body["items"]) == 1
@@ -269,6 +269,13 @@ def test_spec_view_returns_latest_version_with_spans(
     assert item["spans"]["spec"]["start"] < item["spans"]["spec"]["end"]
     assert item["spans"]["tasks"] is not None
     assert item["spans"]["plan"] is not None
+
+    markdown = catalog_client.get(f"/repos/{gid}/specs/{spec.id}/view/markdown")
+    assert markdown.status_code == 200
+    md_body = markdown.json()
+    assert md_body["spec_md"].startswith("# Greeting")
+    assert md_body["tasks_md"] is not None
+    assert md_body["plan_md"] is not None
 
 
 def test_spec_view_unknown_commit_404(catalog_client: TestClient, db_session: Session) -> None:

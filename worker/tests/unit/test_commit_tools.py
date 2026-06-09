@@ -4,13 +4,8 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
-import pytest
-
 from fixtures.git_repos import add_commit, init_repo_with_config, rename_default_branch_to_main
-from specvsreality_worker.core.spec_detection import ArtifactType  # noqa: F401
-from specvsreality_worker.git_adapter import GitAdapter
 from specvsreality_worker.agents.artifact_candidate_agent.deps import CommitToolDeps
-from specvsreality_worker.config import WorkerSettings
 from specvsreality_worker.agents.artifact_candidate_agent.repository_tools import (
     find_files,
     list_directory,
@@ -18,6 +13,9 @@ from specvsreality_worker.agents.artifact_candidate_agent.repository_tools impor
     search_text,
 )
 from specvsreality_worker.agents.artifact_candidate_agent.tool_cache import CommitToolCache
+from specvsreality_worker.config import WorkerSettings
+from specvsreality_worker.core.spec_detection import ArtifactType  # noqa: F401
+from specvsreality_worker.git_adapter import GitAdapter
 
 
 def _make_repo(tmp_path):

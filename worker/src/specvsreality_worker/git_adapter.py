@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import io
+import logging
 import subprocess
 from collections.abc import Iterator
 from datetime import datetime
@@ -15,6 +16,8 @@ from git.objects.commit import Commit
 from pydantic import BaseModel
 
 from specvsreality_worker.core.spec_detection import ArtifactType, SpecDetection
+
+logger = logging.getLogger(__name__)
 
 
 class GitAdapterError(Exception):
@@ -284,6 +287,20 @@ class GitAdapter:
 
         raise GitAdapterError("Repository has no local heads to walk")
 
+    def pull_default_branch(self) -> None:
+        """Fetch and fast-forward the local default branch from origin when available."""
+        if "origin" not in {remote.name for remote in self._repo.remotes}:
+            logger.debug("pull_default_branch skip repo=%s (no origin remote)", self._path)
+            return
+
+        branch = self.default_branch_ref()
+        try:
+            self._repo.remotes.origin.fetch()
+            self._repo.git.checkout(branch)
+            self._repo.remotes.origin.pull(branch)
+        except GitCommandError as e:
+            raise GitAdapterError(f"Failed to pull {branch!r} from origin") from e
+
     def iter_commits_since(self, since_sha: str | None) -> Iterator[str]:
         """
         Walk the default branch oldest-first.
@@ -439,10 +456,7 @@ class GitAdapter:
         _commit_or_raise(self._repo, commit_sha)
 
         normalized = relpath.replace("\\", "/").strip()
-        if normalized in {"", "."}:
-            key = ""
-        else:
-            key = normalized.strip("/")
+        key = "" if normalized in {"", "."} else normalized.strip("/")
         if key and ".." in PurePosixPath(key).parts:
             raise GitAdapterError(f"Invalid path: {relpath!r}")
 

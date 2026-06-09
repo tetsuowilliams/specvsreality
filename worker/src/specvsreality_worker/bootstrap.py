@@ -6,10 +6,17 @@ from collections.abc import Iterable
 
 from specvsreality_messages import KNOWN_MESSAGE_TYPES
 from specvsreality_worker.config import WorkerSettings, load_settings
-from specvsreality_worker.handlers import HelloWorldHandler, MessageHandler, ScanRepoHandler
+from specvsreality_worker.handlers import (
+    HelloWorldHandler,
+    InitRepoHandler,
+    MessageHandler,
+    SpecScanHandler,
+    WindToHeadHandler,
+)
 from specvsreality_worker.messaging.consumer import ConnectionFactory, QueueConsumer
 from specvsreality_worker.messaging.handler_registry import HandlerRegistry
 from specvsreality_worker.messaging.processor import InboundMessageProcessor
+from specvsreality_worker.messaging.publisher import PikaMessagePublisher
 
 
 def ensure_handlers_cover_messages(registry: HandlerRegistry) -> None:
@@ -26,7 +33,13 @@ def ensure_handlers_cover_messages(registry: HandlerRegistry) -> None:
 
 def default_handlers(settings: WorkerSettings) -> tuple[MessageHandler, ...]:
     """Default handler set for a standalone worker process."""
-    return (HelloWorldHandler(), ScanRepoHandler(settings=settings))
+    publisher = PikaMessagePublisher()
+    return (
+        HelloWorldHandler(),
+        InitRepoHandler(settings=settings, publisher=publisher),
+        WindToHeadHandler(settings=settings, publisher=publisher),
+        SpecScanHandler(settings=settings),
+    )
 
 
 def build_handler_registry(

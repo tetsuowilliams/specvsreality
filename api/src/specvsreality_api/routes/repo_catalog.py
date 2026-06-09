@@ -12,7 +12,7 @@ from specvsreality_api.facades.spec_tree_facade import SpecTreeFacade
 from specvsreality_api.facades.spec_view_facade import SpecViewFacade
 from specvsreality_api.schemas.repo_catalog import CatalogSpecItem, RepoCatalogResponse
 from specvsreality_api.schemas.spec_tree import SpecTreeResponse
-from specvsreality_api.schemas.spec_view import SpecViewResponse
+from specvsreality_api.schemas.spec_view import SpecViewMarkdownResponse, SpecViewOverviewResponse
 from specvsreality_repositories.repos import create_git_repo_repo, create_spec_repo
 
 router = APIRouter(tags=["repo-catalog"])
@@ -44,14 +44,31 @@ async def get_spec_tree(
     return SpecTreeFacade(session).get_tree(repo_id=repo_id, spec_id=spec_id)
 
 
-@router.get("/repos/{repo_id}/specs/{spec_id}/view", response_model=SpecViewResponse)
-async def get_spec_view(
+@router.get("/repos/{repo_id}/specs/{spec_id}/view", response_model=SpecViewOverviewResponse)
+async def get_spec_view_overview(
     repo_id: int,
     spec_id: int,
     session: Annotated[Session, Depends(get_session)],
     commit_sha: str | None = None,
-) -> SpecViewResponse:
-    return SpecViewFacade(session).get_view(
+) -> SpecViewOverviewResponse:
+    return SpecViewFacade(session).get_overview(
+        repo_id=repo_id,
+        spec_id=spec_id,
+        commit_sha=commit_sha,
+    )
+
+
+@router.get(
+    "/repos/{repo_id}/specs/{spec_id}/view/markdown",
+    response_model=SpecViewMarkdownResponse,
+)
+async def get_spec_view_markdown(
+    repo_id: int,
+    spec_id: int,
+    session: Annotated[Session, Depends(get_session)],
+    commit_sha: str | None = None,
+) -> SpecViewMarkdownResponse:
+    return SpecViewFacade(session).get_markdown(
         repo_id=repo_id,
         spec_id=spec_id,
         commit_sha=commit_sha,

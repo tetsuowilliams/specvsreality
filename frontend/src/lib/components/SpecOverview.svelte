@@ -1,5 +1,5 @@
 <script lang="ts">
-	import type { SpecViewResponse } from '$lib/api/repoCatalog';
+	import type { SpecViewOverviewResponse } from '$lib/api/repoCatalog';
 	import MetricCard from '$lib/components/MetricCard.svelte';
 	import { DASHBOARD_METRICS, statusHelp } from '$lib/dashboard/metrics';
 	import { attentionItems, type SpecItemAttention } from '$lib/spec/specItemStats';
@@ -9,7 +9,7 @@
 		view,
 		onItemClick
 	}: {
-		view: SpecViewResponse;
+		view: SpecViewOverviewResponse;
 		onItemClick: (itemId: number) => void;
 	} = $props();
 

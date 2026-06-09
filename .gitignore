@@ -6,3 +6,13 @@ __pycache__/
 .env
 .env.*
 !.env.example
+
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage/
+htmlcov/
+*.log
+
+node_modules/

@@ -4,51 +4,48 @@
 	import SpecItemDrawer from '$lib/components/SpecItemDrawer.svelte';
 	import SpecOverview from '$lib/components/SpecOverview.svelte';
 	import {
-		fetchSpecView,
+		fetchSpecViewMarkdown,
+		fetchSpecViewOverview,
 		type SpecDocument,
 		type SpecTab,
-		type SpecViewResponse
+		type SpecViewMarkdown,
+		type SpecViewOverviewResponse
 	} from '$lib/api/repoCatalog';
 	import { itemTypeColor } from '$lib/spec/itemTypeColors';
 
-	let { data }: { data: { id: string; specId: string } } = $props();
-
-	let view = $state<SpecViewResponse | null>(null);
+	let view = $state<SpecViewOverviewResponse | null>(null);
+	let markdown = $state<SpecViewMarkdown | null>(null);
 	let loading = $state(true);
+	let markdownLoading = $state(false);
+	let markdownErr = $state<string | null>(null);
 	let err = $state<string | null>(null);
 	let selectedItemId = $state<number | null>(null);
 	let drawerOpen = $state(false);
 	let activeTab = $state<SpecTab>('overview');
-
+	let loadGeneration = 0;
+	let markdownGeneration = 0;
 	const selectedItem = $derived(
 		view?.items.find((item) => item.id === selectedItemId) ?? null
 	);
 
 	const docTabs = $derived.by(() => {
 		if (!view) return [];
-		const available: { id: SpecDocument; label: string; markdown: string }[] = [
-			{ id: 'spec', label: 'Spec', markdown: view.version.spec_md }
-		];
-		if (view.version.tasks_md?.trim()) {
-			available.push({
-				id: 'tasks',
-				label: 'Tasks',
-				markdown: view.version.tasks_md
-			});
+		const tabs: { id: SpecDocument; label: string }[] = [{ id: 'spec', label: 'Spec' }];
+		if (view.version.has_tasks_md) {
+			tabs.push({ id: 'tasks', label: 'Tasks' });
 		}
-		if (view.version.plan_md?.trim()) {
-			available.push({
-				id: 'plan',
-				label: 'Plan',
-				markdown: view.version.plan_md
-			});
+		if (view.version.has_plan_md) {
+			tabs.push({ id: 'plan', label: 'Plan' });
 		}
-		return available;
+		return tabs;
 	});
 
-	const activeMarkdown = $derived(
-		docTabs.find((tab) => tab.id === activeTab)?.markdown ?? view?.version.spec_md ?? ''
-	);
+	const activeMarkdown = $derived.by(() => {
+		if (!markdown) return '';
+		if (activeTab === 'tasks') return markdown.tasks_md ?? '';
+		if (activeTab === 'plan') return markdown.plan_md ?? '';
+		return markdown.spec_md;
+	});
 
 	const legendTypes = $derived(
 		view && activeTab !== 'overview'
@@ -62,19 +59,72 @@
 			: []
 	);
 
-	async function load(commitSha?: string | null) {
+	function isCommitNotFoundError(error: unknown): boolean {
+		return error instanceof Error && error.message.includes('spec version not found for commit');
+	}
+
+	async function loadMarkdown(
+		repoId: string,
+		specId: string,
+		commitSha: string | null,
+		generation: number
+	) {
+		const mdGeneration = ++markdownGeneration;
+		markdownLoading = true;
+		markdownErr = null;
+		try {
+			let result: SpecViewMarkdown;
+			try {
+				result = await fetchSpecViewMarkdown(repoId, specId, commitSha ?? undefined);
+			} catch (e) {
+				if (!commitSha || !isCommitNotFoundError(e)) {
+					throw e;
+				}
+				result = await fetchSpecViewMarkdown(repoId, specId);
+			}
+			if (generation !== loadGeneration || mdGeneration !== markdownGeneration) return;
+			markdown = result;
+		} catch (e) {
+			if (generation !== loadGeneration || mdGeneration !== markdownGeneration) return;
+			markdownErr = e instanceof Error ? e.message : 'Failed to load markdown';
+			markdown = null;
+		} finally {
+			if (generation === loadGeneration && mdGeneration === markdownGeneration) {
+				markdownLoading = false;
+			}
+		}
+	}
+
+	async function load(repoId: string, specId: string, commitSha: string | null) {
+		const generation = ++loadGeneration;
 		loading = true;
 		err = null;
+		markdown = null;
+		markdownErr = null;
 		selectedItemId = null;
 		drawerOpen = false;
 		activeTab = 'overview';
 		try {
-			view = await fetchSpecView(data.id, data.specId, commitSha ?? undefined);
+			let result: SpecViewOverviewResponse;
+			try {
+				result = await fetchSpecViewOverview(repoId, specId, commitSha ?? undefined);
+			} catch (e) {
+				if (!commitSha || !isCommitNotFoundError(e)) {
+					throw e;
+				}
+				result = await fetchSpecViewOverview(repoId, specId);
+			}
+			if (generation !== loadGeneration) return;
+			view = result;
+			void loadMarkdown(repoId, specId, commitSha, generation);
 		} catch (e) {
+			if (generation !== loadGeneration) return;
 			err = e instanceof Error ? e.message : 'Failed to load spec';
 			view = null;
 		} finally {
-			loading = false;
+			if (generation === loadGeneration) {
+				loading = false;
+			}
 		}
 	}
 
@@ -96,8 +146,11 @@
 	}
 
 	$effect(() => {
+		const repoId = $page.params.id;
+		const specId = $page.params.specId;
 		const commitSha = $page.url.searchParams.get('commit_sha');
-		void load(commitSha);
+		if (!repoId || !specId) return;
+		void load(repoId, specId, commitSha);
 	});
 
 	$effect(() => {
@@ -156,7 +209,11 @@
 
 		{#if activeTab === 'overview'}
 			<SpecOverview {view} onItemClick={openItem} />
-		{:else}
+		{:else if markdownLoading && !markdown}
+			<p class="muted">Loading document…</p>
+		{:else if markdownErr}
+			<p class="error">{markdownErr}</p>
+		{:else if markdown}
 			{#if legendTypes.length > 0}
 				<div class="legend">
 					<span class="legend-label">Highlighted in this tab</span>
@@ -294,6 +351,10 @@
 
 	.markdown-panel {
 		padding: 0.25rem 0.15rem;
+	}
+
+	.muted {
+		color: #64748b;
 	}
 
 	.error {

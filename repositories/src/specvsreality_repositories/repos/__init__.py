@@ -21,13 +21,13 @@ from specvsreality_repositories.repos.implementation_at_commit_repo import (
     create_implementation_at_commit_repo,
 )
 from specvsreality_repositories.repos.implements_repo import ImplementsRepo, create_implements_repo
-from specvsreality_repositories.repos.spec_item_repo import SpecItemRepo, create_spec_item_repo
-from specvsreality_repositories.repos.spec_repo import SpecRepo, create_spec_repo
-from specvsreality_repositories.repos.spec_tree_repo import SpecTreeRepo, create_spec_tree_repo
 from specvsreality_repositories.repos.repo_dashboard_repo import (
     RepoDashboardRepo,
     create_repo_dashboard_repo,
 )
+from specvsreality_repositories.repos.spec_item_repo import SpecItemRepo, create_spec_item_repo
+from specvsreality_repositories.repos.spec_repo import SpecRepo, create_spec_repo
+from specvsreality_repositories.repos.spec_tree_repo import SpecTreeRepo, create_spec_tree_repo
 from specvsreality_repositories.repos.spec_version_repo import (
     SpecVersionRepo,
     create_spec_version_repo,

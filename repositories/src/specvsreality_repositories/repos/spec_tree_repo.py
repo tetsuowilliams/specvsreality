@@ -31,6 +31,38 @@ class SpecTreeRepo:
         )
         return [tuple(row) for row in self._session.execute(stmt).all()]
 
+    def get_latest_version_with_commit(self, *, spec_id: int) -> tuple[SpecVersion, Commit] | None:
+        stmt = (
+            select(SpecVersion, Commit)
+            .join(Commit, Commit.id == SpecVersion.commit_id)
+            .where(SpecVersion.spec_id == spec_id)
+            .order_by(Commit.committed_at.desc(), SpecVersion.id.desc())
+            .limit(1)
+        )
+        row = self._session.execute(stmt).first()
+        if row is None:
+            return None
+        return tuple(row)
+
+    def get_version_with_commit_at_commit(
+        self,
+        *,
+        spec_id: int,
+        commit_id: int,
+    ) -> tuple[SpecVersion, Commit] | None:
+        stmt = (
+            select(SpecVersion, Commit)
+            .join(Commit, Commit.id == SpecVersion.commit_id)
+            .where(
+                SpecVersion.spec_id == spec_id,
+                SpecVersion.commit_id == commit_id,
+            )
+        )
+        row = self._session.execute(stmt).first()
+        if row is None:
+            return None
+        return tuple(row)
+
     def list_items_for_versions(self, *, spec_version_ids: Sequence[int]) -> list[SpecItem]:
         if not spec_version_ids:
             return []
@@ -45,6 +77,7 @@ class SpecTreeRepo:
         self,
         *,
         spec_item_ids: Sequence[int],
+        commit_id: int | None = None,
     ) -> list[tuple[ImplementationAtCommit, Commit]]:
         if not spec_item_ids:
             return []
@@ -52,11 +85,13 @@ class SpecTreeRepo:
             select(ImplementationAtCommit, Commit)
             .join(Commit, Commit.id == ImplementationAtCommit.commit_id)
             .where(ImplementationAtCommit.spec_item_id.in_(spec_item_ids))
-            .order_by(
-                ImplementationAtCommit.spec_item_id.asc(),
-                Commit.committed_at.asc(),
-                ImplementationAtCommit.id.asc(),
-            )
+        )
+        if commit_id is not None:
+            stmt = stmt.where(ImplementationAtCommit.commit_id == commit_id)
+        stmt = stmt.order_by(
+            ImplementationAtCommit.spec_item_id.asc(),
+            Commit.committed_at.asc(),
+            ImplementationAtCommit.id.asc(),
         )
         return [tuple(row) for row in self._session.execute(stmt).all()]
 

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from sqlalchemy import Enum as SaEnum
 from sqlalchemy import ForeignKey, Integer, String, Text
-from sqlalchemy.dialects.postgresql import ARRAY
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from specvsreality_repositories.models.base import Base
@@ -70,4 +70,12 @@ class SpecItem(Base):
         nullable=False,
         default=list,
         comment="Concrete evidence that would indicate this item is not satisfied.",
+    )
+    highlight_spans: Mapped[dict | None] = mapped_column(
+        JSONB,
+        nullable=True,
+        comment=(
+            "Precomputed character spans for UI highlighting, keyed by document "
+            "(spec, tasks, plan)."
+        ),
     )

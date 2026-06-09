@@ -57,6 +57,43 @@ def test_get_by_id_returns_none_when_missing(db_session: Session) -> None:
     assert repo.get_by_id(999_999_999) is None
 
 
+def test_get_or_create_is_idempotent_for_spec_and_commit(
+    db_session: Session,
+    git_repo_id: int,
+    commit_id: int,
+) -> None:
+    spec = create_spec_repo(db_session).add(paper_id="specs/feature", repo_id=git_repo_id)
+    repo = create_spec_version_repo(db_session)
+
+    first, created = repo.get_or_create(
+        spec_id=spec.id,
+        commit_id=commit_id,
+        title="Title",
+        summary="Summary",
+        spec_md="# S",
+        tasks_md=None,
+        plan_md=None,
+        created_at=_COMMIT_DT,
+        status=VersionStatus.ACTIVE,
+    )
+    assert created is True
+
+    second, created = repo.get_or_create(
+        spec_id=spec.id,
+        commit_id=commit_id,
+        title="Other",
+        summary="Other",
+        spec_md="# other",
+        tasks_md=None,
+        plan_md=None,
+        created_at=_COMMIT_DT,
+        status=VersionStatus.ACTIVE,
+    )
+    assert created is False
+    assert second.id == first.id
+    assert second.spec_md == "# S"
+
+
 def test_add_accepts_null_tasks_and_plan(
     db_session: Session, git_repo_id: int, commit_id: int
 ) -> None:

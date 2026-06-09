@@ -1,42 +1,24 @@
-# sv
+# SpecVsReality Frontend
 
-Everything you need to build a Svelte project, powered by [`sv`](https://github.com/sveltejs/cli).
+SvelteKit UI for SpecVsReality. See the [root README](../README.md) for setup.
 
-## Creating a project
+## Native development
 
-If you're seeing this, you've probably already done this step. Congrats!
-
-```sh
-# create a new project
-npx sv create my-app
-```
-
-To recreate this project with the same configuration:
-
-```sh
-# recreate this project
-npx sv@0.13.0 create --template minimal --types ts --no-install .
-```
-
-## Developing
-
-Once you've created a project and installed dependencies with `npm install` (or `pnpm install` or `yarn`), start a development server:
-
-```sh
+```bash
+cp .env.example .env
+npm ci
 npm run dev
-
-# or start the server and open the app in a new browser tab
-npm run dev -- --open
 ```
 
-## Building
+Dev server: http://localhost:5174 (port 5173 is reserved for Opik).
 
-To create a production version of your app:
+Set `PUBLIC_API_BASE_URL` in `.env` (default `http://localhost:8000`).
 
-```sh
-npm run build
-```
+## Scripts
 
-You can preview the production build with `npm run preview`.
-
-> To deploy your app, you may need to install an [adapter](https://svelte.dev/docs/kit/adapters) for your target environment.
+| Command | Description |
+|---------|-------------|
+| `npm run dev` | Vite dev server |
+| `npm run build` | Production build |
+| `npm test` | Vitest unit tests |
+| `npm run check` | svelte-check typecheck |

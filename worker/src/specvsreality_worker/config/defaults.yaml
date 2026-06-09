@@ -10,7 +10,7 @@ heartbeat: 1800
 blocked_connection_timeout: 0
 reconnect_delay_seconds: 5
 username: guest
-password: ""
+password: guest
 
 model_token_costs:
   openai:gpt-4o-mini:

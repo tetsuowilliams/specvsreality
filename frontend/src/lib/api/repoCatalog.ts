@@ -120,35 +120,62 @@ export type SpecViewSummary = {
 	status: string;
 };
 
-export type SpecViewVersion = {
+export type SpecViewVersionMeta = {
 	id: number;
 	commit_sha: string;
 	commit_message: string;
 	committed_at: string;
 	title: string | null;
 	summary: string | null;
+	has_tasks_md: boolean;
+	has_plan_md: boolean;
+};
+
+export type SpecViewMarkdown = {
 	spec_md: string;
 	tasks_md: string | null;
 	plan_md: string | null;
 };
 
-export type SpecViewResponse = {
+export type SpecViewOverviewResponse = {
 	id: number;
 	paper_id: string;
-	version: SpecViewVersion;
+	version: SpecViewVersionMeta;
 	summary: SpecViewSummary;
 	items: SpecViewItem[];
 };
 
+export type SpecViewResponse = SpecViewOverviewResponse & {
+	markdown: SpecViewMarkdown | null;
+};
+
 export type SpecTab = 'overview' | SpecDocument;
 
-export async function fetchSpecView(
+function specViewUrl(
+	repoId: string | number,
+	specId: string | number,
+	path: 'view' | 'view/markdown',
+	commitSha?: string
+): URL {
+	const url = new URL(`${publicApiBaseUrl()}/repos/${repoId}/specs/${specId}/${path}`);
+	if (commitSha) url.searchParams.set('commit_sha', commitSha);
+	return url;
+}
+
+export async function fetchSpecViewOverview(
 	repoId: string | number,
 	specId: string | number,
 	commitSha?: string
-): Promise<SpecViewResponse> {
-	const url = new URL(`${publicApiBaseUrl()}/repos/${repoId}/specs/${specId}/view`);
-	if (commitSha) url.searchParams.set('commit_sha', commitSha);
-	const res = await fetch(url);
+): Promise<SpecViewOverviewResponse> {
+	const res = await fetch(specViewUrl(repoId, specId, 'view', commitSha));
+	return readJson(res);
+}
+
+export async function fetchSpecViewMarkdown(
+	repoId: string | number,
+	specId: string | number,
+	commitSha?: string
+): Promise<SpecViewMarkdown> {
+	const res = await fetch(specViewUrl(repoId, specId, 'view/markdown', commitSha));
 	return readJson(res);
 }

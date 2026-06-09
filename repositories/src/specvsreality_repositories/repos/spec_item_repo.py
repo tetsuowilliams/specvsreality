@@ -39,6 +39,7 @@ class SpecItemRepo:
         importance: SpecItemImportance,
         success_criteria: Sequence[str],
         failure_criteria: Sequence[str],
+        highlight_spans: dict | None = None,
     ) -> SpecItem:
         row = SpecItem(
             spec_version_id=spec_version_id,
@@ -49,6 +50,7 @@ class SpecItemRepo:
             importance=importance,
             success_criteria=list(success_criteria),
             failure_criteria=list(failure_criteria),
+            highlight_spans=highlight_spans,
         )
         self._session.add(row)
         self._session.flush()

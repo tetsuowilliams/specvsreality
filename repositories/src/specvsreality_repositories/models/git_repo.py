@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlalchemy import Integer, String
+from sqlalchemy import Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from specvsreality_repositories.models.base import Base
@@ -25,4 +25,10 @@ class GitRepo(Base):
         String(4096),
         nullable=False,
         doc="Absolute path to the clone on the mounted volume.",
+    )
+    clone_error: Mapped[str] = mapped_column(
+        Text(),
+        nullable=False,
+        default="",
+        doc="Non-empty when initial clone/init failed; contains git/worker error output.",
     )

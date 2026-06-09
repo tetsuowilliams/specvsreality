@@ -103,7 +103,7 @@ class WorkerSettings(BaseSettings):
         description="AMQP username",
     )
     password: str = Field(
-        default="",
+        default="guest",
         validation_alias=AliasChoices("RABBITMQ_PASSWORD", "password"),
         description="AMQP password",
     )
@@ -117,7 +117,7 @@ class WorkerSettings(BaseSettings):
     database_url: str = Field(
         default="",
         validation_alias="DATABASE_URL",
-        description="SQLAlchemy database URL (required for scan_repo)",
+        description="SQLAlchemy database URL (required for repo handlers)",
     )
     repo_clone_root: str = Field(
         default="/repos",

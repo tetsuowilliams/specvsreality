@@ -33,6 +33,9 @@
 					class:active={$page.params.id === String(repo.id)}
 				>
 					<span class="repo-name">{repo.name}</span>
+					{#if repo.clone_error}
+						<span class="repo-clone-error">Clone failed</span>
+					{/if}
 					<span class="repo-url">{repo.url}</span>
 				</a>
 			{/each}
@@ -136,6 +139,12 @@
 		font-size: 0.82rem;
 		font-weight: 600;
 		color: #0f172a;
+	}
+
+	.repo-clone-error {
+		font-size: 0.68rem;
+		font-weight: 600;
+		color: #b91c1c;
 	}
 
 	.repo-url {

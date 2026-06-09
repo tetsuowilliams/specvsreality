@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 from specvsreality_api.config import Settings, get_settings
 from specvsreality_api.deps.session import get_session
 from specvsreality_api.messaging.publisher import MessagePublisher, PikaMessagePublisher
-from specvsreality_messages import ScanRepoMessage
+from specvsreality_messages import InitRepoMessage
 from specvsreality_repositories.models.git_repo import GitRepo
 from specvsreality_repositories.repos import GitRepoRepo
 
@@ -23,8 +23,13 @@ class RepoListItem(BaseModel):
     id: int
     name: str
     url: str
-    cursor_position: str
-    location: str
+    cursor_position: str = Field(
+        description="Last commit SHA processed by the worker (empty until initial sync completes).",
+    )
+    clone_error: str = Field(
+        default="",
+        description="Non-empty when initial clone/init failed; contains git/worker error output.",
+    )
 
 
 class CreateRepoRequest(BaseModel):
@@ -41,8 +46,14 @@ def get_publisher() -> MessagePublisher:
     return PikaMessagePublisher()
 
 
-def _to_item(repo: object) -> RepoListItem:
-    return RepoListItem.model_validate(repo, from_attributes=True)
+def _to_item(repo: GitRepo) -> RepoListItem:
+    return RepoListItem(
+        id=repo.id,
+        name=repo.name,
+        url=repo.url,
+        cursor_position=repo.cursor_position,
+        clone_error=repo.clone_error,
+    )
 
 
 @router.get("/repos", response_model=list[RepoListItem])
@@ -63,7 +74,7 @@ async def post_repos(
 ) -> CreateRepoResponse:
     repo = GitRepoRepo(session).add(name=body.name, url=body.url)
     session.commit()
-    message = ScanRepoMessage(repo_id=str(repo.id))
+    message = InitRepoMessage(repo_id=str(repo.id))
     await publisher.publish(message.model_dump_json().encode("utf-8"), settings)
     return CreateRepoResponse(repo=_to_item(repo))
 

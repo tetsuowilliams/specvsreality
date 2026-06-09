@@ -10,6 +10,8 @@ from specvsreality_repositories.models.enums import SpecItemImportance, SpecItem
 from specvsreality_repositories.models.spec_item import SpecItem
 from specvsreality_repositories.models.spec_version import SpecVersion
 from specvsreality_repositories.repos import SpecItemRepo, SpecRepo, SpecVersionRepo
+from specvsreality_repositories.repos.spec_repo import normalize_spec_folder
+from specvsreality_repositories.text_match import compute_highlight_spans
 from specvsreality_repositories.repos.enums import VersionStatus
 from specvsreality_worker.agents.spec_extraction_agent import SpecExtractionAgent
 from specvsreality_worker.core.agent_metrics import AgentMetricsRecorder
@@ -32,6 +34,23 @@ class SpecWork:
     plan_md: str | None
 
 
+def changed_spec_folders(changes: GitCommitPathInformation) -> list[str]:
+    """Distinct spec directories touched in this commit, preserving order."""
+    folders: list[str] = []
+    seen: set[str] = set()
+    for file_change in changes.paths:
+        if file_change.artifact_type != ArtifactType.SPEC:
+            continue
+        parent = normalize_spec_folder(
+            str(PurePosixPath(file_change.path.replace("\\", "/")).parent)
+        )
+        if not parent or parent in seen:
+            continue
+        seen.add(parent)
+        folders.append(parent)
+    return folders
+
+
 class SpecMerge:
     def __init__(
         self,
@@ -50,20 +69,6 @@ class SpecMerge:
         self._git_adapter = git_adapter
         self._spec_detection = spec_detection
 
-    def _changed_spec_folders(self, changes: GitCommitPathInformation) -> list[str]:
-        """Distinct spec directories touched in this commit, preserving order."""
-        folders: list[str] = []
-        seen: set[str] = set()
-        for file_change in changes.paths:
-            if file_change.artifact_type != ArtifactType.SPEC:
-                continue
-            parent = str(PurePosixPath(file_change.path.replace("\\", "/")).parent)
-            if parent in seen:
-                continue
-            seen.add(parent)
-            folders.append(parent)
-        return folders
-
     def merge_specs(
         self,
         *,
@@ -71,7 +76,7 @@ class SpecMerge:
         changes: GitCommitPathInformation,
         metrics: AgentMetricsRecorder | None = None,
     ) -> list[SpecWork]:
-        spec_folders = self._changed_spec_folders(changes)
+        spec_folders = changed_spec_folders(changes)
         logger.info(
             "merge_specs repo_id=%s commit=%s changed_spec_folders=%s",
             commit.repo_id,
@@ -81,79 +86,121 @@ class SpecMerge:
 
         works: list[SpecWork] = []
         for folder in spec_folders:
-            parent_path = PurePosixPath(folder)
-            spec_md_path = str(parent_path / "spec.md")
-            spec_md = self._git_adapter.file_at_commit_or_none(commit.commit_sha, spec_md_path)
-            if spec_md is None:
-                logger.info(
-                    "merge_specs skip folder=%s commit=%s (no spec.md at commit)",
-                    folder,
-                    commit.commit_sha[:7],
-                )
-                continue
-
-            tasks_md = self._git_adapter.file_at_commit_or_none(
-                commit.commit_sha, str(parent_path / "tasks.md")
-            )
-            plan_md = self._git_adapter.file_at_commit_or_none(
-                commit.commit_sha, str(parent_path / "plan.md")
-            )
-
-            paper_id = parent_path.name or folder
-            extracted = self._spec_extraction_agent.extract_spec(
-                spec_md=spec_md,
-                tasks_md=tasks_md,
-                plan_md=plan_md,
+            work = self.merge_spec_folder(
+                commit=commit,
+                folder=folder,
                 metrics=metrics,
             )
+            if work is not None:
+                works.append(work)
+        return works
 
-            db_spec = self._spec_repo.get_by_paper_id(paper_id=paper_id, repo_id=commit.repo_id)
-            if db_spec is None:
-                db_spec = self._spec_repo.add(paper_id=paper_id, repo_id=commit.repo_id)
-
-            spec_version = self._spec_version_repo.add(
-                spec_id=db_spec.id,
-                commit_id=commit.commit_id,
-                title=extracted.title,
-                summary=extracted.summary,
-                spec_md=spec_md,
-                tasks_md=tasks_md,
-                plan_md=plan_md,
-                created_at=commit.commit_datetime,
-                status=VersionStatus.ACTIVE,
-            )
-
-            spec_items: list[SpecItem] = []
-            for item in extracted.items:
-                spec_items.append(
-                    self._spec_item_repo.add(
-                        spec_version_id=spec_version.id,
-                        local_key=item.local_key,
-                        item_type=SpecItemType(item.item_type),
-                        text=item.text,
-                        source_quote=item.source_quote,
-                        importance=SpecItemImportance(item.importance),
-                        success_criteria=item.success_criteria,
-                        failure_criteria=item.failure_criteria,
-                    )
-                )
-
+    def merge_spec_folder(
+        self,
+        *,
+        commit: CommitContext,
+        folder: str,
+        metrics: AgentMetricsRecorder | None = None,
+    ) -> SpecWork | None:
+        folder = normalize_spec_folder(folder)
+        parent_path = PurePosixPath(folder)
+        spec_md_path = str(parent_path / "spec.md")
+        spec_md = self._git_adapter.file_at_commit_or_none(commit.commit_sha, spec_md_path)
+        if spec_md is None:
             logger.info(
-                "merge_specs folder=%s commit=%s spec_version_id=%s spec_items=%s",
+                "merge_spec_folder skip folder=%s commit=%s (no spec.md at commit)",
+                folder,
+                commit.commit_sha[:7],
+            )
+            return None
+
+        tasks_md = self._git_adapter.file_at_commit_or_none(
+            commit.commit_sha, str(parent_path / "tasks.md")
+        )
+        plan_md = self._git_adapter.file_at_commit_or_none(
+            commit.commit_sha, str(parent_path / "plan.md")
+        )
+
+        db_spec, _spec_created = self._spec_repo.get_or_create_for_folder(
+            folder=folder,
+            repo_id=commit.repo_id,
+        )
+
+        spec_version, version_created = self._spec_version_repo.get_or_create(
+            spec_id=db_spec.id,
+            commit_id=commit.commit_id,
+            title=None,
+            summary=None,
+            spec_md=spec_md,
+            tasks_md=tasks_md,
+            plan_md=plan_md,
+            created_at=commit.commit_datetime,
+            status=VersionStatus.ACTIVE,
+        )
+        if not version_created:
+            spec_items = self._spec_item_repo.list_for_spec_version(
+                spec_version_id=spec_version.id,
+            )
+            logger.info(
+                "merge_spec_folder folder=%s commit=%s reusing spec_version_id=%s items=%s",
                 folder,
                 commit.commit_sha[:7],
                 spec_version.id,
                 len(spec_items),
             )
-            works.append(
-                SpecWork(
-                    spec_version=spec_version,
-                    spec_items=spec_items,
-                    spec_label=paper_id,
-                    spec_md=spec_md,
-                    tasks_md=tasks_md,
-                    plan_md=plan_md,
+            return SpecWork(
+                spec_version=spec_version,
+                spec_items=spec_items,
+                spec_label=folder,
+                spec_md=spec_version.spec_md,
+                tasks_md=spec_version.tasks_md,
+                plan_md=spec_version.plan_md,
+            )
+
+        extracted = self._spec_extraction_agent.extract_spec(
+            spec_md=spec_md,
+            tasks_md=tasks_md,
+            plan_md=plan_md,
+            metrics=metrics,
+        )
+
+        spec_version.title = extracted.title
+        spec_version.summary = extracted.summary
+
+        spec_items: list[SpecItem] = []
+        for item in extracted.items:
+            spec_items.append(
+                self._spec_item_repo.add(
+                    spec_version_id=spec_version.id,
+                    local_key=item.local_key,
+                    item_type=SpecItemType(item.item_type),
+                    text=item.text,
+                    source_quote=item.source_quote,
+                    importance=SpecItemImportance(item.importance),
+                    success_criteria=item.success_criteria,
+                    failure_criteria=item.failure_criteria,
+                    highlight_spans=compute_highlight_spans(
+                        spec_md=spec_md,
+                        tasks_md=tasks_md,
+                        plan_md=plan_md,
+                        source_quote=item.source_quote,
+                        text=item.text,
+                    ),
                 )
             )
 
-        return works
+        logger.info(
+            "merge_spec_folder folder=%s commit=%s spec_version_id=%s spec_items=%s",
+            folder,
+            commit.commit_sha[:7],
+            spec_version.id,
+            len(spec_items),
+        )
+        return SpecWork(
+            spec_version=spec_version,
+            spec_items=spec_items,
+            spec_label=folder,
+            spec_md=spec_md,
+            tasks_md=tasks_md,
+            plan_md=plan_md,
+        )

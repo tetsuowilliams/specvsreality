@@ -9,7 +9,8 @@ from unittest.mock import MagicMock
 import pytest
 
 from specvsreality_repositories.repos.enums import VersionStatus
-from specvsreality_worker.core import ArtifactMerge, CommitContext
+from specvsreality_worker.core.artifact_merge import ArtifactMerge
+from specvsreality_worker.core.commit_context import CommitContext
 from specvsreality_worker.core.spec_detection import ArtifactType
 from specvsreality_worker.git_adapter import ChangedPath, GitCommitPathInformation, PathChangeState
 

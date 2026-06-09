@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from datetime import datetime
 
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
@@ -20,7 +19,6 @@ from specvsreality_repositories.models.enums import SpecItemImportance
 from specvsreality_repositories.repos import create_repo_dashboard_repo
 from specvsreality_repositories.repos.repo_dashboard_repo import (
     LatestEvaluationRow,
-    RepoDashboardRepo,
     SpecLatestVersionRow,
 )
 
@@ -216,7 +214,7 @@ class RepoDashboardFacade:
             elif table_row.low_confidence > 0:
                 low_item = next(
                     (
-                        ev
+                        eval_by_item_id[item.id]
                         for item in items_by_version.get(row.version.id, [])
                         if item.id in eval_by_item_id
                         and self._repo.is_low_confidence(
