@@ -8,6 +8,7 @@ from sqlalchemy import desc, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
+from specvsreality_repositories.models.commit import Commit
 from specvsreality_repositories.models.spec_version import SpecVersion
 from specvsreality_repositories.repos.enums import VersionStatus
 
@@ -37,6 +38,28 @@ class SpecVersionRepo:
             .order_by(SpecVersion.id.asc())
         )
         return list(self._session.scalars(stmt).all())
+
+    def get_latest_at_or_before_commit(
+        self,
+        *,
+        spec_id: int,
+        commit_id: int,
+    ) -> SpecVersion | None:
+        """Newest spec version for ``spec_id`` at or before ``commit_id`` (by commit time)."""
+        target = self._session.get(Commit, commit_id)
+        if target is None:
+            return None
+        stmt = (
+            select(SpecVersion)
+            .join(Commit, Commit.id == SpecVersion.commit_id)
+            .where(
+                SpecVersion.spec_id == spec_id,
+                Commit.committed_at <= target.committed_at,
+            )
+            .order_by(desc(Commit.committed_at), desc(SpecVersion.id))
+            .limit(1)
+        )
+        return self._session.scalars(stmt).first()
 
     def add(
         self,

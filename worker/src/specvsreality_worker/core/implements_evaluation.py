@@ -163,8 +163,9 @@ class ImplementsEvaluation:
             filepath = evidence.artifact_id.replace("\\", "/").strip()
             artifact_version_id = artifact_version_by_filepath.get(filepath)
             if artifact_version_id is None:
-                artifact_version = self._artifact_version_repo.get_latest_for_artifact_filepath(
+                artifact_version = self._artifact_version_repo.get_by_filepath_and_commit(
                     filepath=filepath,
+                    commit_id=commit.commit_id,
                 )
                 if artifact_version is None:
                     logger.warning(

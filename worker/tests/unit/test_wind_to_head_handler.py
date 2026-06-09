@@ -9,7 +9,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
 from specvsreality_messages import SpecScanMessage, WindToHeadMessage
-from specvsreality_repositories.models import Base, GitRepo
+from specvsreality_repositories.models import Base, GitRepo, Spec
 from specvsreality_worker.config import WorkerSettings
 from specvsreality_worker.core.spec_detection import ArtifactType
 from specvsreality_worker.git_adapter import ChangedPath, GitCommitPathInformation, PathChangeState
@@ -42,7 +42,7 @@ def test_wind_to_head_advances_cursor_and_publishes_spec_scan(tmp_path: Path) ->
     db_path = tmp_path / "test.db"
     db_url = f"sqlite:///{db_path}"
     engine = create_engine(db_url, future=True)
-    Base.metadata.create_all(engine, tables=[GitRepo.__table__])
+    Base.metadata.create_all(engine, tables=[GitRepo.__table__, Spec.__table__])
     with Session(bind=engine) as session:
         row = GitRepo(
             name="source",
@@ -51,6 +51,8 @@ def test_wind_to_head_advances_cursor_and_publishes_spec_scan(tmp_path: Path) ->
             location=str(source_repo_path),
         )
         session.add(row)
+        session.flush()
+        session.add(Spec(paper_id="specs/other", repo_id=row.id))
         session.commit()
         repo_id = row.id
 
@@ -81,8 +83,15 @@ def test_wind_to_head_advances_cursor_and_publishes_spec_scan(tmp_path: Path) ->
         assert updated is not None
         assert updated.cursor_position == second_sha
 
-    assert len(publisher.messages) == 1
-    assert isinstance(publisher.messages[0], SpecScanMessage)
-    assert publisher.messages[0].repo_id == str(repo_id)
-    assert publisher.messages[0].commit_id == 99
-    assert publisher.messages[0].spec_folder == "specs/feature"
+    assert len(publisher.messages) == 2
+    extract_by_folder = {
+        message.spec_folder: message.extract_spec
+        for message in publisher.messages
+        if isinstance(message, SpecScanMessage)
+    }
+    assert extract_by_folder == {
+        "specs/feature": True,
+        "specs/other": False,
+    }
+    assert all(message.repo_id == str(repo_id) for message in publisher.messages)
+    assert all(message.commit_id == 99 for message in publisher.messages)

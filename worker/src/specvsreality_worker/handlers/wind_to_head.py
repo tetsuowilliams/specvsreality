@@ -19,11 +19,12 @@ from specvsreality_repositories.repos import (
     create_artifact_repo,
     create_artifact_version_repo,
     create_commit_repo,
+    create_spec_repo,
 )
 from specvsreality_worker.config import WorkerSettings, load_settings
 from specvsreality_worker.core.artifact_merge import ArtifactMerge
 from specvsreality_worker.core.commit_sync import sync_commit_artifacts
-from specvsreality_worker.core.spec_merge import changed_spec_folders
+from specvsreality_worker.core.spec_merge import changed_spec_folders, spec_folders_to_scan
 from specvsreality_worker.git_adapter import GitAdapter, GitAdapterError
 from specvsreality_worker.handlers.protocol import MessageHandler
 from specvsreality_worker.messaging.publisher import MessagePublisher, PikaMessagePublisher
@@ -72,6 +73,7 @@ class WindToHeadHandler(MessageHandler):
                 raise RuntimeError(f"failed to open cloned repo at {repo_row.location}") from exc
 
             commit_repo = create_commit_repo(session)
+            spec_repo = create_spec_repo(session)
             artifact_merge = ArtifactMerge(
                 git_adapter=adapter,
                 artifact_repo=create_artifact_repo(session),
@@ -88,23 +90,29 @@ class WindToHeadHandler(MessageHandler):
                     artifact_merge,
                     commit_sha,
                 )
-                folders = changed_spec_folders(changes)
+                changed_folders = changed_spec_folders(changes)
+                known_folders = [spec.paper_id for spec in spec_repo.list_for_repo(repo_id=repo_id)]
+                scans = spec_folders_to_scan(
+                    changed_folders=changed_folders,
+                    known_spec_folders=known_folders,
+                )
 
                 repo_row.cursor_position = commit_sha
                 session.commit()
                 logger.debug(
-                    "wind_to_head repo_id=%s cursor=%s spec_folders=%s",
+                    "wind_to_head repo_id=%s cursor=%s spec_scans=%s",
                     repo_row.id,
                     commit_sha[:7],
-                    len(folders),
+                    len(scans),
                 )
 
-                for folder in folders:
+                for folder, extract_spec in scans:
                     self._publisher.publish(
                         SpecScanMessage(
                             repo_id=str(repo_id),
                             commit_id=commit.commit_id,
                             spec_folder=folder,
+                            extract_spec=extract_spec,
                         ),
                         self._settings,
                     )

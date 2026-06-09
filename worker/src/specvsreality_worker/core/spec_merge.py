@@ -51,6 +51,20 @@ def changed_spec_folders(changes: GitCommitPathInformation) -> list[str]:
     return folders
 
 
+def spec_folders_to_scan(
+    *,
+    changed_folders: list[str],
+    known_spec_folders: list[str],
+) -> list[tuple[str, bool]]:
+    """Return ``(folder, extract_spec)`` pairs to scan for one commit."""
+    changed_set = set(changed_folders)
+    scans: list[tuple[str, bool]] = [(folder, True) for folder in changed_folders]
+    for folder in known_spec_folders:
+        if folder not in changed_set:
+            scans.append((folder, False))
+    return scans
+
+
 class SpecMerge:
     def __init__(
         self,
@@ -203,4 +217,71 @@ class SpecMerge:
             spec_md=spec_md,
             tasks_md=tasks_md,
             plan_md=plan_md,
+        )
+
+    def load_spec_work_for_evaluation(
+        self,
+        *,
+        commit: CommitContext,
+        folder: str,
+    ) -> SpecWork | None:
+        """Load the effective spec version and items for evaluation without re-extracting."""
+        folder = normalize_spec_folder(folder)
+        parent_path = PurePosixPath(folder)
+        spec_md_path = str(parent_path / "spec.md")
+        if self._git_adapter.file_at_commit_or_none(commit.commit_sha, spec_md_path) is None:
+            logger.info(
+                "load_spec_work skip folder=%s commit=%s (no spec.md at commit)",
+                folder,
+                commit.commit_sha[:7],
+            )
+            return None
+
+        db_spec = self._spec_repo.get_by_paper_id(paper_id=folder, repo_id=commit.repo_id)
+        if db_spec is None:
+            logger.info(
+                "load_spec_work skip folder=%s commit=%s (no spec row)",
+                folder,
+                commit.commit_sha[:7],
+            )
+            return None
+
+        spec_version = self._spec_version_repo.get_latest_at_or_before_commit(
+            spec_id=db_spec.id,
+            commit_id=commit.commit_id,
+        )
+        if spec_version is None:
+            logger.info(
+                "load_spec_work skip folder=%s commit=%s (no version at or before commit)",
+                folder,
+                commit.commit_sha[:7],
+            )
+            return None
+
+        spec_items = self._spec_item_repo.list_for_spec_version(
+            spec_version_id=spec_version.id,
+        )
+        if not spec_items:
+            logger.info(
+                "load_spec_work skip folder=%s commit=%s spec_version_id=%s (no items)",
+                folder,
+                commit.commit_sha[:7],
+                spec_version.id,
+            )
+            return None
+
+        logger.info(
+            "load_spec_work folder=%s commit=%s spec_version_id=%s items=%s",
+            folder,
+            commit.commit_sha[:7],
+            spec_version.id,
+            len(spec_items),
+        )
+        return SpecWork(
+            spec_version=spec_version,
+            spec_items=spec_items,
+            spec_label=folder,
+            spec_md=spec_version.spec_md,
+            tasks_md=spec_version.tasks_md,
+            plan_md=spec_version.plan_md,
         )

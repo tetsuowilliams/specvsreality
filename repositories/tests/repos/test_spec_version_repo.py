@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 
 from sqlalchemy.orm import Session
 
-from specvsreality_repositories.repos import create_spec_repo, create_spec_version_repo
+from specvsreality_repositories.repos import create_commit_repo, create_spec_repo, create_spec_version_repo
 from specvsreality_repositories.repos.enums import VersionStatus
 
 _COMMIT_DT = datetime(2026, 1, 15, tzinfo=UTC)
@@ -92,6 +92,57 @@ def test_get_or_create_is_idempotent_for_spec_and_commit(
     assert created is False
     assert second.id == first.id
     assert second.spec_md == "# S"
+
+
+def test_get_latest_at_or_before_commit(
+    db_session: Session,
+    git_repo_id: int,
+) -> None:
+    from datetime import UTC, datetime
+
+    commit_repo = create_commit_repo(db_session)
+    earlier = commit_repo.get_or_create(
+        repo_id=git_repo_id,
+        commit_sha="a" * 40,
+        commit_message="earlier",
+        committed_at=datetime(2026, 1, 10, tzinfo=UTC),
+    )
+    later = commit_repo.get_or_create(
+        repo_id=git_repo_id,
+        commit_sha="b" * 40,
+        commit_message="later",
+        committed_at=datetime(2026, 1, 20, tzinfo=UTC),
+    )
+    newest = commit_repo.get_or_create(
+        repo_id=git_repo_id,
+        commit_sha="c" * 40,
+        commit_message="newest",
+        committed_at=datetime(2026, 1, 30, tzinfo=UTC),
+    )
+
+    spec = create_spec_repo(db_session).add(paper_id="specs/feature", repo_id=git_repo_id)
+    repo = create_spec_version_repo(db_session)
+    first = _add_spec_version(
+        repo,
+        spec_id=spec.id,
+        commit_id=earlier.id,
+        spec_md="# first",
+    )
+    _add_spec_version(
+        repo,
+        spec_id=spec.id,
+        commit_id=newest.id,
+        spec_md="# newest",
+    )
+
+    at_later = repo.get_latest_at_or_before_commit(spec_id=spec.id, commit_id=later.id)
+    assert at_later is not None
+    assert at_later.id == first.id
+    assert at_later.spec_md == "# first"
+
+    at_newest = repo.get_latest_at_or_before_commit(spec_id=spec.id, commit_id=newest.id)
+    assert at_newest is not None
+    assert at_newest.spec_md == "# newest"
 
 
 def test_add_accepts_null_tasks_and_plan(

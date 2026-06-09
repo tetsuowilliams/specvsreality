@@ -115,17 +115,24 @@ class SpecScanHandler(MessageHandler):
                 commit_id=commit.commit_id,
             )
 
-            work = spec_merge.merge_spec_folder(
-                commit=commit,
-                folder=message.spec_folder,
-                metrics=metrics,
-            )
+            if message.extract_spec:
+                work = spec_merge.merge_spec_folder(
+                    commit=commit,
+                    folder=message.spec_folder,
+                    metrics=metrics,
+                )
+            else:
+                work = spec_merge.load_spec_work_for_evaluation(
+                    commit=commit,
+                    folder=message.spec_folder,
+                )
             if work is None:
                 logger.info(
-                    "spec_scan skip repo_id=%s commit=%s folder=%s (no spec.md)",
+                    "spec_scan skip repo_id=%s commit=%s folder=%s extract_spec=%s",
                     repo_id,
                     commit.commit_sha[:7],
                     message.spec_folder,
+                    message.extract_spec,
                 )
                 return
 

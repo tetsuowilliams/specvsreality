@@ -17,3 +17,10 @@ class SpecScanMessage(BaseModel):
     repo_id: str = Field(min_length=1, description="ID of the git_repo row.")
     commit_id: int = Field(ge=1, description="DB primary key of the commit row.")
     spec_folder: str = Field(min_length=1, description="Spec directory path, e.g. specs/my-feature.")
+    extract_spec: bool = Field(
+        default=True,
+        description=(
+            "When true, run spec extraction for this commit if the spec changed. "
+            "When false, load the latest spec version at or before this commit from the DB."
+        ),
+    )

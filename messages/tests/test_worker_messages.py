@@ -32,3 +32,14 @@ def test_spec_scan_round_trip_json() -> None:
     assert msg.repo_id == "1"
     assert msg.commit_id == 99
     assert msg.spec_folder == "specs/my-feature"
+    assert msg.extract_spec is True
+
+
+def test_spec_scan_extract_spec_false_round_trip_json() -> None:
+    raw = (
+        '{"message_type":"spec_scan","repo_id":"1","commit_id":99,'
+        '"spec_folder":"specs/my-feature","extract_spec":false}'
+    )
+    msg = parse_worker_message(raw)
+    assert isinstance(msg, SpecScanMessage)
+    assert msg.extract_spec is False
