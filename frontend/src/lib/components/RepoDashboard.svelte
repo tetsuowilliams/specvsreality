@@ -1,6 +1,5 @@
 <script lang="ts">
 	import { fetchRepoDashboard, type RepoDashboardResponse } from '$lib/api/repoDashboard';
-	import HelpTip from '$lib/components/HelpTip.svelte';
 	import MetricCard from '$lib/components/MetricCard.svelte';
 	import { DASHBOARD_METRICS, statusHelp } from '$lib/dashboard/metrics';
 
@@ -121,11 +120,11 @@
 							<tr>
 								<th>Spec</th>
 								<th>Version</th>
-								<th><HelpTip {...DASHBOARD_METRICS.status} inline /></th>
-								<th><HelpTip {...DASHBOARD_METRICS.satisfied} inline /></th>
-								<th><HelpTip {...DASHBOARD_METRICS.missing} inline /></th>
-								<th><HelpTip {...DASHBOARD_METRICS.low_confidence} inline /></th>
-								<th><HelpTip {...DASHBOARD_METRICS.candidates} inline /></th>
+								<th title={DASHBOARD_METRICS.status.detail}>Status</th>
+								<th title={DASHBOARD_METRICS.satisfied.detail}>Satisfied</th>
+								<th title={DASHBOARD_METRICS.missing.detail}>Gaps</th>
+								<th title={DASHBOARD_METRICS.low_confidence.detail}>Low confidence</th>
+								<th title={DASHBOARD_METRICS.candidates.detail}>Candidates</th>
 								<th>Last evaluated</th>
 							</tr>
 						</thead>

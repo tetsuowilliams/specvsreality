@@ -48,6 +48,31 @@ class ArtifactVersionRepo:
         )
         return self._session.scalars(stmt).first()
 
+    def get_latest_for_artifact_filepath_at_or_before_commit(
+        self,
+        *,
+        filepath: str,
+        commit_id: int,
+    ) -> ArtifactVersion | None:
+        """Newest artifact snapshot for ``filepath`` at or before ``commit_id``."""
+        target = self._session.get(Commit, commit_id)
+        if target is None:
+            return None
+        normalized = filepath.replace("\\", "/")
+        av = ArtifactVersion
+        stmt = (
+            select(av)
+            .join(Artifact, Artifact.id == av.artifact_id)
+            .join(Commit, Commit.id == av.commit_id)
+            .where(
+                Artifact.filepath == normalized,
+                Commit.committed_at <= target.committed_at,
+            )
+            .order_by(desc(Commit.committed_at), desc(av.id))
+            .limit(1)
+        )
+        return self._session.scalars(stmt).first()
+
     def add(
         self,
         *,

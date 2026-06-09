@@ -35,6 +35,7 @@ from specvsreality_repositories.text_match import find_item_span
 class _ResolvedVersion:
     version: SpecVersion
     commit: Commit
+    evaluation_commit: Commit
 
 
 class SpecViewFacade:
@@ -61,7 +62,7 @@ class SpecViewFacade:
         item_blocks = self._build_item_blocks(
             items=items,
             version=version,
-            commit_id=version_commit.id,
+            commit_id=resolved.evaluation_commit.id,
         )
         summary = self._build_summary(item_blocks)
 
@@ -112,27 +113,35 @@ class SpecViewFacade:
         tree_repo = create_spec_tree_repo(self._session)
 
         if commit_sha is not None:
-            commit = create_commit_repo(self._session).get_by_sha(
+            evaluation_commit = create_commit_repo(self._session).get_by_sha(
                 repo_id=repo_id,
                 commit_sha=commit_sha,
             )
-            if commit is None:
+            if evaluation_commit is None:
                 raise HTTPException(status_code=404, detail="spec version not found for commit")
 
-            version_row = tree_repo.get_version_with_commit_at_commit(
+            version_row = tree_repo.get_latest_version_with_commit_at_or_before_commit(
                 spec_id=spec_id,
-                commit_id=commit.id,
+                commit_id=evaluation_commit.id,
             )
             if version_row is None:
                 raise HTTPException(status_code=404, detail="spec version not found for commit")
             version, version_commit = version_row
-            return _ResolvedVersion(version=version, commit=version_commit)
+            return _ResolvedVersion(
+                version=version,
+                commit=version_commit,
+                evaluation_commit=evaluation_commit,
+            )
 
         version_row = tree_repo.get_latest_version_with_commit(spec_id=spec_id)
         if version_row is None:
             raise HTTPException(status_code=404, detail="no spec versions found")
         version, version_commit = version_row
-        return _ResolvedVersion(version=version, commit=version_commit)
+        return _ResolvedVersion(
+            version=version,
+            commit=version_commit,
+            evaluation_commit=version_commit,
+        )
 
     def _build_item_blocks(
         self,

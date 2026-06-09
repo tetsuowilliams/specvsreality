@@ -63,6 +63,30 @@ class SpecTreeRepo:
             return None
         return tuple(row)
 
+    def get_latest_version_with_commit_at_or_before_commit(
+        self,
+        *,
+        spec_id: int,
+        commit_id: int,
+    ) -> tuple[SpecVersion, Commit] | None:
+        target = self._session.get(Commit, commit_id)
+        if target is None:
+            return None
+        stmt = (
+            select(SpecVersion, Commit)
+            .join(Commit, Commit.id == SpecVersion.commit_id)
+            .where(
+                SpecVersion.spec_id == spec_id,
+                Commit.committed_at <= target.committed_at,
+            )
+            .order_by(Commit.committed_at.desc(), SpecVersion.id.desc())
+            .limit(1)
+        )
+        row = self._session.execute(stmt).first()
+        if row is None:
+            return None
+        return tuple(row)
+
     def list_items_for_versions(self, *, spec_version_ids: Sequence[int]) -> list[SpecItem]:
         if not spec_version_ids:
             return []

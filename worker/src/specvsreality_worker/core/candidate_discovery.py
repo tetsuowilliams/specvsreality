@@ -80,9 +80,11 @@ class CandidateDiscovery:
                 continue
             seen_filepaths.add(filepath)
 
-            artifact_version = self._artifact_version_repo.get_by_filepath_and_commit(
-                filepath=filepath,
-                commit_id=commit.commit_id,
+            artifact_version = (
+                self._artifact_version_repo.get_latest_for_artifact_filepath_at_or_before_commit(
+                    filepath=filepath,
+                    commit_id=commit.commit_id,
+                )
             )
             if artifact_version is None:
                 logger.warning(

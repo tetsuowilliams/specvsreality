@@ -100,6 +100,53 @@ def test_get_by_filepath_and_commit_returns_none_unknown_path(db_session: Sessio
     assert av_repo.get_by_filepath_and_commit(filepath="other/path.py", commit_id=cid) is None
 
 
+def test_get_latest_for_artifact_filepath_at_or_before_commit(
+    db_session: Session, git_row_id: int
+) -> None:
+    commit_repo = create_commit_repo(db_session)
+    earlier = commit_repo.get_or_create(
+        repo_id=git_row_id,
+        commit_sha="a" * 40,
+        commit_message="earlier",
+        committed_at=datetime(2026, 1, 10, tzinfo=UTC),
+    )
+    later = commit_repo.get_or_create(
+        repo_id=git_row_id,
+        commit_sha="b" * 40,
+        commit_message="later",
+        committed_at=datetime(2026, 1, 20, tzinfo=UTC),
+    )
+    art = create_artifact_repo(db_session).add(filepath="src/app.py")
+    av_repo = create_artifact_version_repo(db_session)
+    first = av_repo.add(
+        artifact_id=art.id,
+        commit_id=earlier.id,
+        status="active",
+        file_content="v1",
+    )
+    av_repo.add(
+        artifact_id=art.id,
+        commit_id=later.id,
+        status="updated",
+        file_content="v2",
+    )
+
+    at_earlier = av_repo.get_latest_for_artifact_filepath_at_or_before_commit(
+        filepath="src/app.py",
+        commit_id=earlier.id,
+    )
+    assert at_earlier is not None
+    assert at_earlier.id == first.id
+    assert at_earlier.file_content == "v1"
+
+    at_later = av_repo.get_latest_for_artifact_filepath_at_or_before_commit(
+        filepath="src/app.py",
+        commit_id=later.id,
+    )
+    assert at_later is not None
+    assert at_later.file_content == "v2"
+
+
 def test_get_by_filepath_and_commit_prefers_highest_id_on_duplicates(db_session: Session, git_row_id: int) -> None:
     cid = _commit(db_session, git_row_id, "9" * 40)
     art = create_artifact_repo(db_session).add(filepath="dup/path.py")
