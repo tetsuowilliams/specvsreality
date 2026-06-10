@@ -1,5 +1,7 @@
 <script lang="ts">
+	import CommitLogSidebar from '$lib/components/CommitLogSidebar.svelte';
 	import SpecSidebar from '$lib/components/SpecSidebar.svelte';
+	import { page } from '$app/stores';
 	import { getAppContext } from '$lib/appContext';
 	import { getRepo, type Repo } from '$lib/api/repos';
 	import { setRepoContext } from '$lib/repoContext';
@@ -11,6 +13,8 @@
 	let repo = $state<Repo | null>(null);
 	let repoLoading = $state(true);
 	let repoError = $state<string | null>(null);
+
+	const showLogSidebar = $derived($page.url.pathname.startsWith(`/repos/${data.id}/logs`));
 
 	setRepoContext({
 		getRepo: () => repo,
@@ -37,7 +41,13 @@
 </script>
 
 <div class="repo-workspace">
-	<SpecSidebar repoId={data.id} />
+	<div class="repo-left">
+		{#if showLogSidebar}
+			<CommitLogSidebar repoId={data.id} />
+		{:else}
+			<SpecSidebar repoId={data.id} />
+		{/if}
+	</div>
 	<section class="repo-main">
 		{#if repoLoading}
 			<p class="repo-loading-hint" aria-live="polite">Loading repository…</p>
@@ -59,6 +69,14 @@
 	.repo-workspace {
 		display: flex;
 		min-height: calc(100vh - 3.25rem);
+	}
+
+	.repo-left {
+		display: flex;
+		flex-direction: column;
+		flex-shrink: 0;
+		border-right: 1px solid #e2e8f0;
+		background: #fff;
 	}
 
 	.repo-main {

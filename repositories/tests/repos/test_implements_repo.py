@@ -128,6 +128,80 @@ def test_upsert_evidence_creates_row_when_missing(
     assert row.evidence_snippet == "def hello(): pass"
 
 
+def test_get_by_implementation_and_artifact_version(
+    db_session: Session, git_repo_id: int, commit_id: int
+) -> None:
+    iac_id = _iac_id(db_session, git_repo_id=git_repo_id, commit_id=commit_id)
+    av_id = _artifact_version_id(db_session, commit_id=commit_id, filepath="b.py", content="c")
+    repo = create_implements_repo(db_session)
+    row = repo.add(implementation_at_commit_id=iac_id, artifact_version_id=av_id)
+
+    loaded = repo.get_by_implementation_and_artifact_version(
+        implementation_at_commit_id=iac_id,
+        artifact_version_id=av_id,
+    )
+    assert loaded is not None
+    assert loaded.implementation_at_commit_id == row.implementation_at_commit_id
+
+
+def test_get_for_implementation_and_filepath(
+    db_session: Session, git_repo_id: int, commit_id: int
+) -> None:
+    iac_id = _iac_id(db_session, git_repo_id=git_repo_id, commit_id=commit_id)
+    av_id = _artifact_version_id(
+        db_session, commit_id=commit_id, filepath="src/pkg/mod.py", content="code"
+    )
+    repo = create_implements_repo(db_session)
+    repo.add(implementation_at_commit_id=iac_id, artifact_version_id=av_id)
+
+    found = repo.get_for_implementation_and_filepath(
+        implementation_at_commit_id=iac_id,
+        filepath=r"src\pkg\mod.py",
+    )
+    assert found is not None
+    assert found.artifact_version_id == av_id
+    assert repo.get_for_implementation_and_filepath(
+        implementation_at_commit_id=iac_id,
+        filepath="missing.py",
+    ) is None
+
+
+def test_update_evidence_returns_none_when_missing(db_session: Session) -> None:
+    repo = create_implements_repo(db_session)
+    assert (
+        repo.update_evidence(
+            implementation_at_commit_id=1,
+            artifact_version_id=2,
+            evidence_file="f.py",
+            evidence_line_number=1,
+            evidence_snippet="x",
+            evidence_relevance="r",
+        )
+        is None
+    )
+
+
+def test_update_evidence_updates_existing_row(
+    db_session: Session, git_repo_id: int, commit_id: int
+) -> None:
+    iac_id = _iac_id(db_session, git_repo_id=git_repo_id, commit_id=commit_id)
+    av_id = _artifact_version_id(db_session, commit_id=commit_id, filepath="c.py", content="c")
+    repo = create_implements_repo(db_session)
+    repo.add(implementation_at_commit_id=iac_id, artifact_version_id=av_id)
+
+    updated = repo.update_evidence(
+        implementation_at_commit_id=iac_id,
+        artifact_version_id=av_id,
+        evidence_file="c.py",
+        evidence_line_number=10,
+        evidence_snippet="snippet",
+        evidence_relevance="relevant",
+    )
+    assert updated is not None
+    assert updated.evidence_line_number == 10
+    assert updated.evidence_snippet == "snippet"
+
+
 def test_get_returns_none_when_pair_missing(db_session: Session) -> None:
     repo = create_implements_repo(db_session)
     assert repo.get(implementation_at_commit_id=1, artifact_version_id=2) is None

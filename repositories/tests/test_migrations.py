@@ -16,6 +16,7 @@ def test_expected_tables_exist(engine: Engine) -> None:
         "artifact_candidate",
         "artifact_version",
         "commit",
+        "commit_log",
         "git_repo",
         "implementation_at_commit",
         "implements",

@@ -51,20 +51,6 @@ def changed_spec_folders(changes: GitCommitPathInformation) -> list[str]:
     return folders
 
 
-def spec_folders_to_scan(
-    *,
-    changed_folders: list[str],
-    known_spec_folders: list[str],
-) -> list[tuple[str, bool]]:
-    """Return ``(folder, extract_spec)`` pairs to scan for one commit."""
-    changed_set = set(changed_folders)
-    scans: list[tuple[str, bool]] = [(folder, True) for folder in changed_folders]
-    for folder in known_spec_folders:
-        if folder not in changed_set:
-            scans.append((folder, False))
-    return scans
-
-
 class SpecMerge:
     def __init__(
         self,
@@ -172,6 +158,116 @@ class SpecMerge:
             )
 
         extracted = self._spec_extraction_agent.extract_spec(
+            spec_md=spec_md,
+            tasks_md=tasks_md,
+            plan_md=plan_md,
+            metrics=metrics,
+        )
+
+        spec_version.title = extracted.title
+        spec_version.summary = extracted.summary
+
+        spec_items: list[SpecItem] = []
+        for item in extracted.items:
+            spec_items.append(
+                self._spec_item_repo.add(
+                    spec_version_id=spec_version.id,
+                    local_key=item.local_key,
+                    item_type=SpecItemType(item.item_type),
+                    text=item.text,
+                    source_quote=item.source_quote,
+                    importance=SpecItemImportance(item.importance),
+                    success_criteria=item.success_criteria,
+                    failure_criteria=item.failure_criteria,
+                    highlight_spans=compute_highlight_spans(
+                        spec_md=spec_md,
+                        tasks_md=tasks_md,
+                        plan_md=plan_md,
+                        source_quote=item.source_quote,
+                        text=item.text,
+                    ),
+                )
+            )
+
+        logger.info(
+            "merge_spec_folder folder=%s commit=%s spec_version_id=%s spec_items=%s",
+            folder,
+            commit.commit_sha[:7],
+            spec_version.id,
+            len(spec_items),
+        )
+        return SpecWork(
+            spec_version=spec_version,
+            spec_items=spec_items,
+            spec_label=folder,
+            spec_md=spec_md,
+            tasks_md=tasks_md,
+            plan_md=plan_md,
+        )
+
+    async def merge_spec_folder_async(
+        self,
+        *,
+        commit: CommitContext,
+        folder: str,
+        metrics: AgentMetricsRecorder | None = None,
+    ) -> SpecWork | None:
+        folder = normalize_spec_folder(folder)
+        parent_path = PurePosixPath(folder)
+        spec_md_path = str(parent_path / "spec.md")
+        spec_md = self._git_adapter.file_at_commit_or_none(commit.commit_sha, spec_md_path)
+        if spec_md is None:
+            logger.info(
+                "merge_spec_folder skip folder=%s commit=%s (no spec.md at commit)",
+                folder,
+                commit.commit_sha[:7],
+            )
+            return None
+
+        tasks_md = self._git_adapter.file_at_commit_or_none(
+            commit.commit_sha, str(parent_path / "tasks.md")
+        )
+        plan_md = self._git_adapter.file_at_commit_or_none(
+            commit.commit_sha, str(parent_path / "plan.md")
+        )
+
+        db_spec, _spec_created = self._spec_repo.get_or_create_for_folder(
+            folder=folder,
+            repo_id=commit.repo_id,
+        )
+
+        spec_version, version_created = self._spec_version_repo.get_or_create(
+            spec_id=db_spec.id,
+            commit_id=commit.commit_id,
+            title=None,
+            summary=None,
+            spec_md=spec_md,
+            tasks_md=tasks_md,
+            plan_md=plan_md,
+            created_at=commit.commit_datetime,
+            status=VersionStatus.ACTIVE,
+        )
+        if not version_created:
+            spec_items = self._spec_item_repo.list_for_spec_version(
+                spec_version_id=spec_version.id,
+            )
+            logger.info(
+                "merge_spec_folder folder=%s commit=%s reusing spec_version_id=%s items=%s",
+                folder,
+                commit.commit_sha[:7],
+                spec_version.id,
+                len(spec_items),
+            )
+            return SpecWork(
+                spec_version=spec_version,
+                spec_items=spec_items,
+                spec_label=folder,
+                spec_md=spec_version.spec_md,
+                tasks_md=spec_version.tasks_md,
+                plan_md=spec_version.plan_md,
+            )
+
+        extracted = await self._spec_extraction_agent.extract_spec_async(
             spec_md=spec_md,
             tasks_md=tasks_md,
             plan_md=plan_md,

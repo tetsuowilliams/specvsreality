@@ -145,6 +145,64 @@ def test_get_latest_at_or_before_commit(
     assert at_newest.spec_md == "# newest"
 
 
+def test_get_for_spec_at_commit(db_session: Session, git_repo_id: int, commit_id: int) -> None:
+    spec = create_spec_repo(db_session).add(paper_id="specs/at-commit", repo_id=git_repo_id)
+    repo = create_spec_version_repo(db_session)
+    row = _add_spec_version(repo, spec_id=spec.id, commit_id=commit_id, spec_md="# at commit")
+
+    found = repo.get_for_spec_at_commit(spec_id=spec.id, commit_id=commit_id)
+    assert found is not None
+    assert found.id == row.id
+    assert found.spec_md == "# at commit"
+    assert repo.get_for_spec_at_commit(spec_id=spec.id, commit_id=999_999_999) is None
+
+
+def test_list_for_spec_ordered(db_session: Session, git_repo_id: int) -> None:
+    from datetime import UTC, datetime
+
+    commit_repo = create_commit_repo(db_session)
+    first_commit = commit_repo.get_or_create(
+        repo_id=git_repo_id,
+        commit_sha="d" * 40,
+        commit_message="first",
+        committed_at=datetime(2026, 1, 10, tzinfo=UTC),
+    )
+    second_commit = commit_repo.get_or_create(
+        repo_id=git_repo_id,
+        commit_sha="e" * 40,
+        commit_message="second",
+        committed_at=datetime(2026, 1, 20, tzinfo=UTC),
+    )
+    spec = create_spec_repo(db_session).add(paper_id="p", repo_id=git_repo_id)
+    repo = create_spec_version_repo(db_session)
+    v1 = repo.add(
+        spec_id=spec.id,
+        commit_id=first_commit.id,
+        title="T1",
+        summary="S1",
+        spec_md="s1",
+        tasks_md="t1",
+        plan_md="p1",
+        created_at=_COMMIT_DT,
+        status=VersionStatus.ACTIVE,
+    )
+    v2 = repo.add(
+        spec_id=spec.id,
+        commit_id=second_commit.id,
+        title="T2",
+        summary="S2",
+        spec_md="s2",
+        tasks_md="t2",
+        plan_md="p2",
+        created_at=_COMMIT_DT,
+        status=VersionStatus.ACTIVE,
+    )
+
+    rows = repo.list_for_spec_ordered(spec_id=spec.id)
+    assert [r.id for r in rows] == [v1.id, v2.id]
+    assert rows[0].spec_md == "s1"
+
+
 def test_add_accepts_null_tasks_and_plan(
     db_session: Session, git_repo_id: int, commit_id: int
 ) -> None:

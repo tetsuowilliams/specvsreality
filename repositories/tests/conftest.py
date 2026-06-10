@@ -9,10 +9,12 @@ from pathlib import Path
 import pytest
 from alembic import command
 from alembic.config import Config
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 from testcontainers.postgres import PostgresContainer
+
+from tests.fixtures.graph import DEFAULT_COMMIT_DT, add_commit, add_git_repo
 
 
 def _to_sync_url(url: str) -> str:
@@ -64,35 +66,14 @@ def db_session(engine: Engine) -> Generator[Session, None, None]:
 
 @pytest.fixture()
 def git_repo_id(db_session: Session) -> int:
-    result = db_session.execute(
-        text(
-            """
-        INSERT INTO git_repo (name, url, cursor_position, location)
-        VALUES (:name, :url, :cursor_position, :location)
-        RETURNING id
-        """
-        ),
-        {
-            "name": "repo",
-            "url": "https://example.test/repo.git",
-            "cursor_position": "a" * 40,
-            "location": "/tmp/repo",
-        },
-    )
-    row = result.fetchone()
-    assert row is not None
-    return int(row[0])
+    return add_git_repo(db_session).id
 
 
 @pytest.fixture()
 def commit_id(db_session: Session, git_repo_id: int) -> int:
-    from datetime import UTC, datetime
-
-    from specvsreality_repositories.repos import create_commit_repo
-
-    return create_commit_repo(db_session).get_or_create(
+    return add_commit(
+        db_session,
         repo_id=git_repo_id,
         commit_sha="a" * 40,
-        commit_message="commit message",
-        committed_at=datetime(2026, 1, 15, tzinfo=UTC),
+        committed_at=DEFAULT_COMMIT_DT,
     ).id

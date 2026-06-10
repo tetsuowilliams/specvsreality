@@ -36,3 +36,10 @@ class AgentName(StrEnum):
     SPEC_EXTRACTION = "spec_extraction"
     ARTIFACT_CANDIDATE = "artifact_candidate"
     IMPLEMENTS = "implements"
+
+
+class CommitLogAction(StrEnum):
+    """Action recorded in a commit decision log entry."""
+
+    SPEC_EXTRACT = "spec_extract"
+    SPEC_RESCAN = "spec_rescan"

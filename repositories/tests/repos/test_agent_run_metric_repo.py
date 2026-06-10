@@ -68,3 +68,44 @@ def test_record_and_aggregate(
 
     filtered = metric_repo.list_recent_runs(limit=10, repo_id=git_repo_id)
     assert len(filtered) == 2
+
+
+def test_aggregates_return_empty_when_no_data(metric_repo) -> None:
+    totals = metric_repo.global_totals()
+    assert totals.total_runs == 0
+    assert totals.total_tokens == 0
+    assert totals.repo_count == 0
+    assert metric_repo.aggregate_by_repo() == []
+    assert metric_repo.aggregate_by_agent() == []
+    assert metric_repo.list_recent_runs(limit=10) == []
+
+
+def test_list_recent_runs_filters_by_repo_id(
+    db_session: Session,
+    metric_repo,
+    git_repo_id: int,
+    commit_id: int,
+) -> None:
+    from datetime import UTC, datetime
+    from decimal import Decimal
+
+    from tests.fixtures.graph import add_git_repo
+
+    other_repo_id = add_git_repo(
+        db_session,
+        name="other",
+        url="https://example.test/other.git",
+    ).id
+    ran_at = datetime(2026, 6, 8, 12, 0, tzinfo=UTC)
+    metric_repo.record(
+        repo_id=git_repo_id,
+        commit_id=commit_id,
+        agent=AgentName.SPEC_EXTRACTION,
+        model="openai:gpt-4o-mini",
+        input_tokens=100,
+        output_tokens=50,
+        cost_usd=Decimal("0.0001"),
+        ran_at=ran_at,
+    )
+
+    assert len(metric_repo.list_recent_runs(limit=10, repo_id=other_repo_id)) == 0

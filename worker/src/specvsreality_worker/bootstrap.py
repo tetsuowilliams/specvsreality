@@ -10,7 +10,6 @@ from specvsreality_worker.handlers import (
     HelloWorldHandler,
     InitRepoHandler,
     MessageHandler,
-    SpecScanHandler,
     WindToHeadHandler,
 )
 from specvsreality_worker.messaging.consumer import ConnectionFactory, QueueConsumer
@@ -37,8 +36,7 @@ def default_handlers(settings: WorkerSettings) -> tuple[MessageHandler, ...]:
     return (
         HelloWorldHandler(),
         InitRepoHandler(settings=settings, publisher=publisher),
-        WindToHeadHandler(settings=settings, publisher=publisher),
-        SpecScanHandler(settings=settings),
+        WindToHeadHandler(settings=settings),
     )
 
 

@@ -55,7 +55,7 @@ class ImplementsEvaluation:
         metrics: AgentMetricsRecorder | None = None,
     ) -> None:
         asyncio.run(
-            self._evaluate_async(
+            self.evaluate_async(
                 commit=commit,
                 work=work,
                 candidates=candidates,
@@ -63,7 +63,7 @@ class ImplementsEvaluation:
             ),
         )
 
-    async def _evaluate_async(
+    async def evaluate_async(
         self,
         *,
         commit: CommitContext,

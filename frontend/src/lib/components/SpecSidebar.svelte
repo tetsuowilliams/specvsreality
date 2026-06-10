@@ -91,7 +91,7 @@
 					</div>
 					{#if expanded[spec.id] && spec.versions.length > 0}
 						<ul class="version-list">
-							{#each spec.versions as version (version.version_id)}
+							{#each spec.versions as version (version.commit_sha)}
 								<li>
 									<a
 										class="version-link"

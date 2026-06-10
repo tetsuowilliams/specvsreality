@@ -12,12 +12,11 @@ from specvsreality_messages.hello_world import (
     HelloWorldMessage,
 )
 from specvsreality_messages.init_repo import INIT_REPO_MESSAGE_TYPE, InitRepoMessage
-from specvsreality_messages.spec_scan import SPEC_SCAN_MESSAGE_TYPE, SpecScanMessage
 from specvsreality_messages.wind_to_head import WIND_TO_HEAD_MESSAGE_TYPE, WindToHeadMessage
 
 # Union of all concrete messages; extend when adding new types.
 WorkerMessage = Annotated[
-    HelloWorldMessage | InitRepoMessage | WindToHeadMessage | SpecScanMessage,
+    HelloWorldMessage | InitRepoMessage | WindToHeadMessage,
     Field(discriminator="message_type"),
 ]
 
@@ -29,7 +28,6 @@ KNOWN_MESSAGE_TYPES: frozenset[str] = frozenset(
         HELLO_WORLD_MESSAGE_TYPE,
         INIT_REPO_MESSAGE_TYPE,
         WIND_TO_HEAD_MESSAGE_TYPE,
-        SPEC_SCAN_MESSAGE_TYPE,
     }
 )
 
@@ -48,8 +46,6 @@ __all__ = [
     "InitRepoMessage",
     "WIND_TO_HEAD_MESSAGE_TYPE",
     "WindToHeadMessage",
-    "SPEC_SCAN_MESSAGE_TYPE",
-    "SpecScanMessage",
     "KNOWN_MESSAGE_TYPES",
     "WorkerMessage",
     "parse_worker_message",

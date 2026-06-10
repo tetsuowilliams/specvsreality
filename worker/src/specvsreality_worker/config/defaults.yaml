@@ -12,6 +12,8 @@ reconnect_delay_seconds: 5
 username: guest
 password: guest
 
+under_implemented_coverage_threshold: 0.7
+
 model_token_costs:
   openai:gpt-4o-mini:
     input_per_million: 0.15

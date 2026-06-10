@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import concurrent.futures
+import asyncio
 import logging
 import time
 from collections.abc import Sequence
@@ -57,6 +57,33 @@ class ArtifactCandidateAgent:
         tool_cache: CommitToolCache | None = None,
         metrics: AgentMetricsRecorder | None = None,
     ) -> ArtifactCandidateResult:
+        return asyncio.run(
+            self.discover_async(
+                git_adapter=git_adapter,
+                commit_sha=commit_sha,
+                spec_label=spec_label,
+                spec_md=spec_md,
+                tasks_md=tasks_md,
+                plan_md=plan_md,
+                spec_items=spec_items,
+                tool_cache=tool_cache,
+                metrics=metrics,
+            ),
+        )
+
+    async def discover_async(
+        self,
+        *,
+        git_adapter: GitAdapter,
+        commit_sha: str,
+        spec_label: str,
+        spec_md: str,
+        tasks_md: str | None,
+        plan_md: str | None,
+        spec_items: Sequence[SpecItemContext],
+        tool_cache: CommitToolCache | None = None,
+        metrics: AgentMetricsRecorder | None = None,
+    ) -> ArtifactCandidateResult:
         prompt = build_discovery_prompt(
             spec_md=spec_md,
             tasks_md=tasks_md,
@@ -84,32 +111,30 @@ class ArtifactCandidateAgent:
         )
         started = time.monotonic()
 
-        def _run_agent() -> object:
+        try:
             with ToolManager.parallel_execution_mode("sequential"):
-                return self._agent.run_sync(
-                    prompt,
-                    deps=deps,
-                    usage_limits=usage_limits,
-                    event_stream_handler=build_event_stream_handler(self._settings),
+                result = await asyncio.wait_for(
+                    self._agent.run(
+                        prompt,
+                        deps=deps,
+                        usage_limits=usage_limits,
+                        event_stream_handler=build_event_stream_handler(self._settings),
+                    ),
+                    timeout=timeout_s,
                 )
-
-        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
-            future = executor.submit(_run_agent)
-            try:
-                result = future.result(timeout=timeout_s)
-            except concurrent.futures.TimeoutError as exc:
-                elapsed_s = time.monotonic() - started
-                logger.error(
-                    "artifact candidate discover timeout spec=%s commit=%s elapsed_s=%.1f to=%s",
-                    spec_label,
-                    commit_sha[:7],
-                    elapsed_s,
-                    timeout_s,
-                )
-                raise TimeoutError(
-                    f"artifact candidate discovery timed out after {timeout_s}s "
-                    f"(spec={spec_label!r}, commit={commit_sha[:7]})",
-                ) from exc
+        except TimeoutError as exc:
+            elapsed_s = time.monotonic() - started
+            logger.error(
+                "artifact candidate discover timeout spec=%s commit=%s elapsed_s=%.1f to=%s",
+                spec_label,
+                commit_sha[:7],
+                elapsed_s,
+                timeout_s,
+            )
+            raise TimeoutError(
+                f"artifact candidate discovery timed out after {timeout_s}s "
+                f"(spec={spec_label!r}, commit={commit_sha[:7]})",
+            ) from exc
 
         elapsed_s = time.monotonic() - started
         if metrics is not None:

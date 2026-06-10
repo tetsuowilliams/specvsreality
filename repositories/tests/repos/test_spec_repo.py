@@ -57,6 +57,15 @@ def test_get_or_create_for_folder_upserts_by_normalized_path(
     assert second.id == first.id
 
 
+def test_list_for_repo_orders_by_paper_id(db_session: Session, git_repo_id: int) -> None:
+    repo = create_spec_repo(db_session)
+    s_b = repo.add(paper_id="b-paper", repo_id=git_repo_id)
+    s_a = repo.add(paper_id="a-paper", repo_id=git_repo_id)
+
+    rows = repo.list_for_repo(repo_id=git_repo_id)
+    assert [r.id for r in rows] == [s_a.id, s_b.id]
+
+
 def test_get_or_create_for_folder_reuses_legacy_basename_row(
     db_session: Session,
     git_repo_id: int,

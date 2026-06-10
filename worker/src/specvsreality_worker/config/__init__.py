@@ -153,6 +153,15 @@ class WorkerSettings(BaseSettings):
         validation_alias="LOGFIRE_CONSOLE_VERBOSE",
     )
 
+    # --- Commit walk ---
+    under_implemented_coverage_threshold: float = Field(
+        default=0.7,
+        ge=0.0,
+        le=1.0,
+        validation_alias="UNDER_IMPLEMENTED_COVERAGE_THRESHOLD",
+        description="Rescan historic specs when implementation coverage is below this fraction",
+    )
+
     # --- Agent models ---
     spec_extraction_model: str = Field(
         default="openai:gpt-4o-mini",

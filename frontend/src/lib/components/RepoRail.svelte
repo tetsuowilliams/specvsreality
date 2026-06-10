@@ -27,17 +27,21 @@
 			<p class="empty">No repositories yet.</p>
 		{:else}
 			{#each repos as repo (repo.id)}
-				<a
-					href="/repos/{repo.id}"
-					class="repo-link"
-					class:active={$page.params.id === String(repo.id)}
-				>
-					<span class="repo-name">{repo.name}</span>
-					{#if repo.clone_error}
-						<span class="repo-clone-error">Clone failed</span>
-					{/if}
-					<span class="repo-url">{repo.url}</span>
-				</a>
+				{@const repoId = String(repo.id)}
+				{@const onLogs = $page.url.pathname.startsWith(`/repos/${repoId}/logs`)}
+				{@const onRepo =
+					$page.url.pathname === `/repos/${repoId}` ||
+					$page.url.pathname.startsWith(`/repos/${repoId}/spec/`)}
+				<div class="repo-group">
+					<a href="/repos/{repo.id}" class="repo-link" class:active={onRepo}>
+						<span class="repo-name">{repo.name}</span>
+						{#if repo.clone_error}
+							<span class="repo-clone-error">Clone failed</span>
+						{/if}
+						<span class="repo-url">{repo.url}</span>
+					</a>
+					<a href="/repos/{repo.id}/logs" class="repo-sub-link" class:active={onLogs}>Commits</a>
+				</div>
 			{/each}
 		{/if}
 	</nav>
@@ -115,6 +119,11 @@
 		overflow: auto;
 	}
 
+	.repo-group {
+		display: grid;
+		gap: 0.1rem;
+	}
+
 	.repo-link {
 		display: grid;
 		gap: 0.1rem;
@@ -132,6 +141,29 @@
 	.repo-link.active {
 		background: #fff;
 		border-color: #dbeafe;
+		box-shadow: 0 1px 2px rgba(37, 99, 235, 0.08);
+	}
+
+	.repo-sub-link {
+		margin-left: 0.65rem;
+		padding: 0.3rem 0.5rem;
+		border-radius: 0.35rem;
+		text-decoration: none;
+		font-size: 0.76rem;
+		font-weight: 500;
+		color: #64748b;
+		border: 1px solid transparent;
+	}
+
+	.repo-sub-link:hover {
+		background: #eef2f7;
+		color: #334155;
+	}
+
+	.repo-sub-link.active {
+		background: #fff;
+		border-color: #dbeafe;
+		color: #1d4ed8;
 		box-shadow: 0 1px 2px rgba(37, 99, 235, 0.08);
 	}
 

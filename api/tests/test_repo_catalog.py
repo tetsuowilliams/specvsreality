@@ -356,6 +356,80 @@ def test_repo_dashboard_returns_summary_and_specs(
     assert sidebar_spec["versions"][0]["status"] == "good"
 
 
+def test_repo_sidebar_lists_each_evaluation_commit(
+    catalog_client: TestClient, db_session: Session
+) -> None:
+    gid = create_git_repo_repo(db_session).add(
+        name="sidebar-multi-eval",
+        url="https://example.test/sidebar.git",
+        cursor_position="f" * 40,
+        location="/tmp/sidebar",
+    ).id
+    commit_repo = create_commit_repo(db_session)
+    earlier = commit_repo.get_or_create(
+        repo_id=gid,
+        commit_sha="a" * 40,
+        commit_message="earlier",
+        committed_at=datetime(2026, 1, 10, tzinfo=UTC),
+    )
+    later = commit_repo.get_or_create(
+        repo_id=gid,
+        commit_sha="b" * 40,
+        commit_message="later",
+        committed_at=datetime(2026, 1, 20, tzinfo=UTC),
+    )
+    spec = create_spec_repo(db_session).add(paper_id="specs/auth", repo_id=gid)
+    version = create_spec_version_repo(db_session).add(
+        spec_id=spec.id,
+        commit_id=earlier.id,
+        title="Auth",
+        summary="Login flow",
+        spec_md="# Auth",
+        tasks_md=None,
+        plan_md=None,
+        created_at=_COMMIT_DT,
+        status=VersionStatus.ACTIVE,
+    )
+    item = create_spec_item_repo(db_session).add(
+        spec_version_id=version.id,
+        local_key="FR-1",
+        item_type=SpecItemType.FUNCTIONAL_BEHAVIOR,
+        text="Users can log in",
+        source_quote="log in",
+        importance=SpecItemImportance.MUST,
+        success_criteria=[],
+        failure_criteria=[],
+    )
+    iac_repo = create_implementation_at_commit_repo(db_session)
+    iac_repo.upsert_evaluation(
+        spec_item_id=item.id,
+        commit_id=earlier.id,
+        implemented=True,
+        summary="done",
+        gaps=[],
+        confidence=0.95,
+    )
+    iac_repo.upsert_evaluation(
+        spec_item_id=item.id,
+        commit_id=later.id,
+        implemented=True,
+        summary="still done",
+        gaps=[],
+        confidence=0.9,
+    )
+    db_session.flush()
+
+    sidebar = catalog_client.get(f"/repos/{gid}/sidebar")
+    assert sidebar.status_code == 200
+    sidebar_spec = sidebar.json()["specs"][0]
+    assert sidebar_spec["id"] == spec.id
+    assert len(sidebar_spec["versions"]) == 2
+    assert sidebar_spec["versions"][0]["commit_sha"] == "b" * 40
+    assert sidebar_spec["versions"][1]["commit_sha"] == "a" * 40
+    assert sidebar_spec["versions"][0]["version_id"] == version.id
+    assert sidebar_spec["versions"][1]["version_id"] == version.id
+
+
 def test_repo_dashboard_unknown_repo_404(catalog_client: TestClient) -> None:
     resp = catalog_client.get("/repos/999999999/dashboard")
     assert resp.status_code == 404

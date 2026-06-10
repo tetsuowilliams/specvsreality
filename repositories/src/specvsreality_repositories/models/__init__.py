@@ -6,7 +6,13 @@ from specvsreality_repositories.models.artifact_candidate import ArtifactCandida
 from specvsreality_repositories.models.artifact_version import ArtifactVersion
 from specvsreality_repositories.models.base import Base
 from specvsreality_repositories.models.commit import Commit
-from specvsreality_repositories.models.enums import AgentName, SpecItemImportance, SpecItemType
+from specvsreality_repositories.models.commit_log import CommitLog
+from specvsreality_repositories.models.enums import (
+    AgentName,
+    CommitLogAction,
+    SpecItemImportance,
+    SpecItemType,
+)
 from specvsreality_repositories.models.git_repo import GitRepo
 from specvsreality_repositories.models.implementation_at_commit import ImplementationAtCommit
 from specvsreality_repositories.models.implements import Implements
@@ -22,6 +28,8 @@ __all__ = [
     "ArtifactVersion",
     "Base",
     "Commit",
+    "CommitLog",
+    "CommitLogAction",
     "GitRepo",
     "ImplementationAtCommit",
     "Implements",

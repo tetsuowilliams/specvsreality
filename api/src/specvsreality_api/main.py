@@ -12,6 +12,7 @@ from specvsreality_api.routes import (
     metrics_dashboard,
     repo_catalog,
     repo_dashboard,
+    repo_logs,
     repos,
 )
 
@@ -30,6 +31,7 @@ def create_app() -> FastAPI:
     app.include_router(repos.router)
     app.include_router(repo_catalog.router)
     app.include_router(repo_dashboard.router)
+    app.include_router(repo_logs.router)
     app.include_router(metrics_dashboard.router)
     app.include_router(health.router)
     return app

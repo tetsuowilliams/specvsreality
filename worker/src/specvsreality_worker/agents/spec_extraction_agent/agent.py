@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from typing import TYPE_CHECKING
 
 import opik
@@ -57,7 +58,45 @@ class SpecExtractionAgent:
         plan_md: str | None,
         metrics: AgentMetricsRecorder | None = None,
     ) -> ExtractedSpec:
-        prompt = (
+        return asyncio.run(
+            self.extract_spec_async(
+                spec_md=spec_md,
+                tasks_md=tasks_md,
+                plan_md=plan_md,
+                metrics=metrics,
+            ),
+        )
+
+    async def extract_spec_async(
+        self,
+        *,
+        spec_md: str,
+        tasks_md: str | None,
+        plan_md: str | None,
+        metrics: AgentMetricsRecorder | None = None,
+    ) -> ExtractedSpec:
+        prompt = self._build_prompt(spec_md=spec_md, tasks_md=tasks_md, plan_md=plan_md)
+        result = await self._agent.run(
+            prompt,
+            event_stream_handler=build_event_stream_handler(self._settings),
+        )
+        if metrics is not None:
+            metrics.record(
+                agent=AgentName.SPEC_EXTRACTION,
+                model=self._settings.spec_extraction_model,
+                usage=result.usage(),
+                ran_at=result.timestamp(),
+            )
+        return result.output
+
+    @staticmethod
+    def _build_prompt(
+        *,
+        spec_md: str,
+        tasks_md: str | None,
+        plan_md: str | None,
+    ) -> str:
+        return (
             "Analyze the following spec-kit markdown files and extract a structured spec.\n"
             "Return:\n"
             "1) title: a concise human-readable title for this spec version\n"
@@ -75,18 +114,6 @@ class SpecExtractionAgent:
             f"{plan_md or ''}\n"
             "</plan.md>\n"
         )
-        result = self._agent.run_sync(
-            prompt,
-            event_stream_handler=build_event_stream_handler(self._settings),
-        )
-        if metrics is not None:
-            metrics.record(
-                agent=AgentName.SPEC_EXTRACTION,
-                model=self._settings.spec_extraction_model,
-                usage=result.usage(),
-                ran_at=result.timestamp(),
-            )
-        return result.output
 
 
 def create_spec_extraction_agent(settings: WorkerSettings) -> SpecExtractionAgent:

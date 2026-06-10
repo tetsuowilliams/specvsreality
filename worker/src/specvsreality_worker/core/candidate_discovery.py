@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from dataclasses import dataclass
 
@@ -49,6 +50,17 @@ class CandidateDiscovery:
         work: SpecWork,
         metrics: AgentMetricsRecorder | None = None,
     ) -> list[ResolvedCandidate]:
+        return asyncio.run(
+            self.discover_async(commit=commit, work=work, metrics=metrics),
+        )
+
+    async def discover_async(
+        self,
+        *,
+        commit: CommitContext,
+        work: SpecWork,
+        metrics: AgentMetricsRecorder | None = None,
+    ) -> list[ResolvedCandidate]:
         spec_item_contexts = [
             SpecItemContext(
                 local_key=item.local_key,
@@ -60,7 +72,7 @@ class CandidateDiscovery:
             for item in work.spec_items
         ]
 
-        result = self._artifact_candidate_agent.discover(
+        result = await self._artifact_candidate_agent.discover_async(
             git_adapter=self._git_adapter,
             commit_sha=commit.commit_sha,
             spec_label=work.spec_label,
