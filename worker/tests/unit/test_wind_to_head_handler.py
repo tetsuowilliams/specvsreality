@@ -185,7 +185,7 @@ def test_wind_to_head_rescans_under_implemented_and_linked_specs(tmp_path: Path)
     assert folders == ["specs/linked", "specs/low"]
 
 
-def test_wind_to_head_does_not_advance_cursor_when_scan_fails(tmp_path: Path) -> None:
+def test_wind_to_head_continues_when_scan_fails(tmp_path: Path) -> None:
     source_repo_path = tmp_path / "source"
     source_repo_path.mkdir()
     source_repo = Repo.init(str(source_repo_path))
@@ -254,10 +254,9 @@ def test_wind_to_head_does_not_advance_cursor_when_scan_fails(tmp_path: Path) ->
         scan_repo.list_specs_for_changed_artifacts_at_commit.return_value = []
         scan_repo_factory.return_value = scan_repo
 
-        with pytest.raises(RuntimeError, match="scan failed"):
-            handler.handle(WindToHeadMessage(repo_id=str(repo_id)))
+        handler.handle(WindToHeadMessage(repo_id=str(repo_id)))
 
     with Session(bind=engine) as session:
         updated = session.get(GitRepo, repo_id)
         assert updated is not None
-        assert updated.cursor_position == second_sha
+        assert updated.cursor_position == all_shas[-1]

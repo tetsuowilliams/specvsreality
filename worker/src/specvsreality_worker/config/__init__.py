@@ -208,7 +208,7 @@ class WorkerSettings(BaseSettings):
         validation_alias="ARTIFACT_CANDIDATE_AGENT_REQUEST_LIMIT",
     )
     artifact_candidate_agent_tool_calls_limit: int = Field(
-        default=40,
+        default=100,
         validation_alias="ARTIFACT_CANDIDATE_AGENT_TOOL_CALLS_LIMIT",
     )
     artifact_candidate_agent_search_max_files: int = Field(

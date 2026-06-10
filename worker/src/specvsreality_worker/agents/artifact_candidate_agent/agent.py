@@ -7,6 +7,7 @@ from collections.abc import Sequence
 from typing import TYPE_CHECKING
 
 import opik
+from pydantic_ai.exceptions import UsageLimitExceeded
 from pydantic_ai.tool_manager import ToolManager
 
 from specvsreality_repositories.models.enums import AgentName
@@ -122,19 +123,29 @@ class ArtifactCandidateAgent:
                     ),
                     timeout=timeout_s,
                 )
-        except TimeoutError as exc:
+        except UsageLimitExceeded as exc:
             elapsed_s = time.monotonic() - started
-            logger.error(
+            logger.warning(
+                "artifact candidate discover usage limit spec=%s commit=%s elapsed_s=%.1f "
+                "request_limit=%s tool_calls_limit=%s: %s",
+                spec_label,
+                commit_sha[:7],
+                elapsed_s,
+                usage_limits.request_limit,
+                usage_limits.tool_calls_limit,
+                exc,
+            )
+            return ArtifactCandidateResult()
+        except TimeoutError:
+            elapsed_s = time.monotonic() - started
+            logger.warning(
                 "artifact candidate discover timeout spec=%s commit=%s elapsed_s=%.1f to=%s",
                 spec_label,
                 commit_sha[:7],
                 elapsed_s,
                 timeout_s,
             )
-            raise TimeoutError(
-                f"artifact candidate discovery timed out after {timeout_s}s "
-                f"(spec={spec_label!r}, commit={commit_sha[:7]})",
-            ) from exc
+            return ArtifactCandidateResult()
 
         elapsed_s = time.monotonic() - started
         if metrics is not None:

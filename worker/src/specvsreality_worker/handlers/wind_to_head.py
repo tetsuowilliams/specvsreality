@@ -139,11 +139,19 @@ class WindToHeadHandler(MessageHandler):
                 )
 
                 for target in targets:
-                    await spec_scanner.scan_async(
-                        commit=commit,
-                        spec_folder=target.spec_folder,
-                        extract_spec=target.extract_spec,
-                    )
+                    try:
+                        await spec_scanner.scan_async(
+                            commit=commit,
+                            spec_folder=target.spec_folder,
+                            extract_spec=target.extract_spec,
+                        )
+                    except Exception:
+                        logger.exception(
+                            "wind_to_head scan failed repo_id=%s commit=%s folder=%s",
+                            repo_row.id,
+                            commit_sha[:7],
+                            target.spec_folder,
+                        )
 
                 repo_row.cursor_position = commit_sha
                 session.commit()
